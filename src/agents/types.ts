@@ -1,56 +1,44 @@
-export type IntentCategory = 'robot_task' | 'greeting' | 'hardware_query' | 'workflow_edit';
-
-export interface Entity {
-  type: string;
-  value: string;
-}
+export type IntentCategory =
+  | 'face_recognition_action'
+  | 'emotion_interaction'
+  | 'game_interaction'
+  | 'custom';
 
 export interface Intent {
   category: IntentCategory;
-  subCategory?: string;
-  entities: Entity[];
+  entities: Record<string, string>;
   confidence: number;
+  missingInfo?: string[];
 }
 
-export interface ScenarioParameter {
-  name: string;
-  type: string;
-  description?: string;
-  required: boolean;
-  value?: string | number | boolean | null;
-  default?: string | number | boolean | null;
-}
-
-export interface WorkflowTemplate {
+export interface WorkflowDefinition {
   name: string;
   nodes: Array<Record<string, unknown>>;
   connections: Record<string, unknown>;
+  settings?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
 }
 
-export interface Scenario {
-  id: string;
-  name: string;
-  description: string;
-  intentCategory: IntentCategory;
-  intentSubCategory?: string;
-  requiredComponents: string[];
-  requiredParams: ScenarioParameter[];
-  workflowTemplate: WorkflowTemplate;
-}
-
-export interface CommandInstruction {
-  command: 'CREATE_WORKFLOW';
-  scenarioId: string;
-  params: Record<string, unknown>;
-  displayText: string;
-}
-
-export interface AgentResponse {
-  type: 'guidance' | 'command_ready';
-  message: string;
-  command?: CommandInstruction;
-  commandText?: string;
-}
+export type AgentResponse =
+  | {
+      type: 'guidance';
+      message: string;
+    }
+  | {
+      type: 'workflow_ready';
+      message: string;
+      workflow: WorkflowDefinition;
+      reasoning?: string;
+      metadata?: {
+        iterations: number;
+        nodeCount: number;
+      };
+    }
+  | {
+      type: 'error';
+      message: string;
+      details?: unknown;
+    };
 
 export interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -60,16 +48,8 @@ export interface ConversationTurn {
 export interface AgentSession {
   id: string;
   history: ConversationTurn[];
+  workflow?: WorkflowDefinition;
   createdAt: string;
   updatedAt: string;
   expiresAt?: string;
-}
-
-export interface HardwareComponent {
-  id: string;
-  name: string;
-  displayName: string;
-  nodeType: string;
-  defaultConfig: Record<string, unknown>;
-  capabilities: string[];
 }

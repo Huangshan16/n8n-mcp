@@ -20,8 +20,12 @@ describe('Agent DB setup', () => {
       await ensureAgentTables(adapter);
       await seedAgentData(adapter);
 
-      expect(getCount(adapter, 'scenarios')).toBeGreaterThan(0);
       expect(getCount(adapter, 'hardware_components')).toBeGreaterThan(0);
+
+      const scenarioCheck = adapter
+        .prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
+        .get('table', 'scenarios') as { name?: string } | undefined;
+      expect(scenarioCheck?.name).toBeUndefined();
 
       const tableCheck = adapter
         .prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
