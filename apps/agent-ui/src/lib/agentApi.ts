@@ -8,9 +8,18 @@ export interface WorkflowDefinition {
   meta?: Record<string, unknown>;
 }
 
+export interface WorkflowBlueprint {
+  intentSummary: string;
+  triggers: Array<{ type: 'webhook' | 'scheduleTrigger'; config: Record<string, unknown> }>;
+  logic: Array<{ type: 'if' | 'splitInBatches'; config: Record<string, unknown> }>;
+  executors: Array<{ type: 'set' | 'httpRequest'; config: Record<string, unknown> }>;
+  missingFields: string[];
+}
+
 export interface AgentResponse {
-  type: 'guidance' | 'workflow_ready' | 'error';
+  type: 'guidance' | 'summary_ready' | 'workflow_ready' | 'error';
   message: string;
+  blueprint?: WorkflowBlueprint;
   workflow?: WorkflowDefinition;
   reasoning?: string;
   metadata?: {
@@ -48,6 +57,10 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 
 export async function sendAgentMessage(message: string, sessionId?: string): Promise<AgentChatResponse> {
   return postJson<AgentChatResponse>('/api/agent/chat', { message, sessionId });
+}
+
+export async function confirmAgentWorkflow(sessionId: string): Promise<AgentChatResponse> {
+  return postJson<AgentChatResponse>('/api/agent/confirm', { sessionId });
 }
 
 export async function createWorkflow(

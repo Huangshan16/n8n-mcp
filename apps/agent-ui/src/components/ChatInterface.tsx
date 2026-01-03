@@ -8,17 +8,45 @@ const QUICK_PROMPTS = [
   '我想有一个和我玩石头剪刀布的机器人',
 ];
 
+const NODE_LABELS: Record<string, string> = {
+  webhook: 'Webhook',
+  scheduleTrigger: '定时触发',
+  if: '条件判断',
+  splitInBatches: '批量循环',
+  set: '数据处理',
+  httpRequest: 'HTTP 请求',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  person_name: '人物名称',
+  gesture: '动作手势',
+  speech_content: '语音内容',
+  tts_voice: '音色',
+  emotion_mode: '情绪模式',
+  game_type: '游戏类型',
+  schedule_time: '触发时间',
+};
+
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   onSend: (message: string) => void;
   onCreateWorkflow: (workflow: WorkflowDefinition) => Promise<unknown>;
+  onConfirmWorkflow: () => Promise<void>;
   status: ConnectionStatus;
   isBusy: boolean;
 }
 
-export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBusy }: ChatInterfaceProps) {
+export function ChatInterface({
+  messages,
+  onSend,
+  onCreateWorkflow,
+  onConfirmWorkflow,
+  status,
+  isBusy,
+}: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [dismissedSummaries, setDismissedSummaries] = useState<Record<string, boolean>>({});
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -34,6 +62,20 @@ export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBu
     }
     onSend(input.trim());
     setInput('');
+  };
+
+  const formatNodeList = (items: Array<{ type: string }>) => {
+    if (items.length === 0) {
+      return '未指定';
+    }
+    return items.map((item) => NODE_LABELS[item.type] || item.type).join(' / ');
+  };
+
+  const formatMissingFields = (fields: string[]) => {
+    if (fields.length === 0) {
+      return '无';
+    }
+    return fields.map((field) => FIELD_LABELS[field] || field).join('、');
   };
 
   return (
@@ -80,6 +122,38 @@ export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBu
                     <span className="mono rounded-full border border-cyan-400/30 px-2 py-0.5">
                       iterations {message.metadata.iterations}
                     </span>
+                  </div>
+                ) : null}
+                {message.responseType === 'summary_ready' && message.blueprint ? (
+                  <div className="mt-3 space-y-1 text-xs text-cyan-200/70">
+                    <p>触发器: {formatNodeList(message.blueprint.triggers)}</p>
+                    <p>逻辑: {formatNodeList(message.blueprint.logic)}</p>
+                    <p>执行: {formatNodeList(message.blueprint.executors)}</p>
+                    <p>缺失: {formatMissingFields(message.blueprint.missingFields)}</p>
+                  </div>
+                ) : null}
+                {message.responseType === 'summary_ready' && !dismissedSummaries[message.id] ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDismissedSummaries((prev) => ({
+                          ...prev,
+                          [message.id]: true,
+                        }))
+                      }
+                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-black/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-200/80 transition hover:border-cyan-200/60"
+                    >
+                      继续交流
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onConfirmWorkflow}
+                      disabled={isBusy}
+                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      确认构建
+                    </button>
                   </div>
                 ) : null}
                 {message.workflow ? (

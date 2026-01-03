@@ -10,7 +10,7 @@ const N8nIframe = lazy(() =>
 );
 
 function App() {
-  const { messages, status, isBusy, sendMessage, createWorkflow } = useAgentChat();
+  const { messages, status, isBusy, sendMessage, createWorkflow, confirmWorkflow } = useAgentChat();
   const [refreshToken, setRefreshToken] = useState(0);
 
   const handleCreateWorkflow = async (workflow: WorkflowDefinition) => {
@@ -44,6 +44,7 @@ function App() {
               messages={messages}
               onSend={sendMessage}
               onCreateWorkflow={handleCreateWorkflow}
+              onConfirmWorkflow={confirmWorkflow}
               status={status}
               isBusy={isBusy}
             />

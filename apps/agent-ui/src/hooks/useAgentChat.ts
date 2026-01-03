@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createWorkflow as createWorkflowApi, sendAgentMessage } from '../lib/agentApi';
-import type { WorkflowCreateResult, WorkflowDefinition, AgentResponse } from '../lib/agentApi';
+import {
+  confirmAgentWorkflow,
+  createWorkflow as createWorkflowApi,
+  sendAgentMessage,
+} from '../lib/agentApi';
+import type { WorkflowCreateResult, WorkflowDefinition, AgentResponse, WorkflowBlueprint } from '../lib/agentApi';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -9,12 +13,14 @@ export interface ChatMessage {
   role: ChatRole;
   text: string;
   workflow?: WorkflowDefinition;
+  blueprint?: WorkflowBlueprint;
   reasoning?: string;
   metadata?: {
     iterations: number;
     nodeCount: number;
   };
   variant?: 'error' | 'normal';
+  responseType?: AgentResponse['type'];
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
@@ -49,9 +55,11 @@ export function useAgentChat() {
       role: 'assistant',
       text: response.message,
       workflow: response.workflow,
+      blueprint: response.blueprint,
       reasoning: response.reasoning,
       metadata: response.metadata,
       variant: response.type === 'error' ? 'error' : 'normal',
+      responseType: response.type,
     });
   }, [appendMessage]);
 
@@ -155,11 +163,37 @@ export function useAgentChat() {
     [sessionId]
   );
 
+  const confirmWorkflow = useCallback(async () => {
+    if (!sessionId) {
+      return;
+    }
+    setIsBusy(true);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'confirm_workflow',
+          sessionId,
+        })
+      );
+      setIsBusy(false);
+      return;
+    }
+
+    try {
+      const response = await confirmAgentWorkflow(sessionId);
+      handleAgentResponse({ type: 'agent_response', ...response });
+    } finally {
+      setIsBusy(false);
+    }
+  }, [handleAgentResponse, sessionId]);
+
   return {
     messages,
     status,
     isBusy,
     sendMessage,
     createWorkflow,
+    confirmWorkflow,
   };
 }
