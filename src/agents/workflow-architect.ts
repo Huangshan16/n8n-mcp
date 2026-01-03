@@ -6,6 +6,7 @@ import { buildArchitectSystemPrompt } from './prompts/architect-system';
 import { selectPromptVariant } from './prompts/prompt-variants';
 import { SimpleCache } from '../utils/simple-cache';
 import { logger } from '../utils/logger';
+import { ALLOWED_NODE_TYPES } from './allowed-node-types';
 
 export interface WorkflowRequest {
   userIntent: string;
@@ -36,14 +37,15 @@ export interface WorkflowGenerationOptions {
   maxIterations?: number;
 }
 
-const BASE_NODE_QUERIES = ['http request', 'webhook', 'if', 'code'];
-const BASE_NODE_TYPES = [
-  'n8n-nodes-base.httpRequest',
-  'n8n-nodes-base.webhook',
-  'n8n-nodes-base.if',
-  'n8n-nodes-base.code',
-  'n8n-nodes-base.set',
+const BASE_NODE_QUERIES = [
+  'http request',
+  'webhook',
+  'schedule trigger',
+  'if',
+  'split in batches',
+  'set',
 ];
+const BASE_NODE_TYPES = [...ALLOWED_NODE_TYPES];
 
 export class WorkflowArchitect {
   private maxIterations: number;
@@ -84,7 +86,12 @@ export class WorkflowArchitect {
       'autofix_workflow: 尝试自动修复常见错误',
     ];
     const variant = selectPromptVariant(this.promptVariant, request.userIntent);
-    const systemPrompt = `${buildArchitectSystemPrompt(request.hardwareComponents, toolDescriptions, variant)}\n\n# 节点上下文\n${nodeContext}`;
+    const systemPrompt = `${buildArchitectSystemPrompt(
+      request.hardwareComponents,
+      toolDescriptions,
+      ALLOWED_NODE_TYPES,
+      variant
+    )}\n\n# 节点上下文\n${nodeContext}`;
     const userMessage = this.buildUserMessage(request);
 
     let lastErrors: string[] = [];
@@ -185,7 +192,8 @@ export class WorkflowArchitect {
 1. 使用search_nodes查询需要的节点类型
 2. 使用get_node确认节点配置与typeVersion
 3. 输出完整workflow JSON（包含nodes/connections/settings）
-4. 先输出Reasoning，再输出JSON代码块
+4. 仅使用允许的节点类型：${ALLOWED_NODE_TYPES.join(', ')}
+5. 先输出Reasoning，再输出JSON代码块
 `;
   }
 
@@ -198,7 +206,11 @@ export class WorkflowArchitect {
     }
 
     const nodeTypes = new Set<string>(BASE_NODE_TYPES);
-    components.forEach((component) => nodeTypes.add(component.nodeType));
+    components.forEach((component) => {
+      if (ALLOWED_NODE_TYPES.includes(component.nodeType)) {
+        nodeTypes.add(component.nodeType);
+      }
+    });
 
     for (const query of BASE_NODE_QUERIES) {
       await this.mcpClient.searchNodes({ query, limit: 5, includeExamples: false });

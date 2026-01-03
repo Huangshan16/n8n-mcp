@@ -5,6 +5,7 @@ import { WorkflowDiffEngine } from '../services/workflow-diff-engine';
 import { WorkflowValidator, ValidationIssue } from '../services/workflow-validator';
 import { SimpleCache } from '../utils/simple-cache';
 import type { WorkflowDefinition } from './types';
+import { ALLOWED_NODE_TYPES } from './allowed-node-types';
 
 export interface SearchNodesParams {
   query: string;
@@ -58,6 +59,7 @@ export interface ValidationResult {
 
 export interface MCPClientOptions {
   cacheTtlSeconds?: number;
+  allowedNodeTypes?: string[];
   workflowValidator?: {
     validateWorkflow: (
       workflow: WorkflowDefinition,
@@ -82,6 +84,7 @@ export interface MCPClientOptions {
 export class MCPClient {
   private cache: SimpleCache;
   private cacheTtlSeconds: number;
+  private allowedNodeTypes: Set<string> | null;
   private workflowValidator: {
     validateWorkflow: (
       workflow: WorkflowDefinition,
@@ -108,6 +111,8 @@ export class MCPClient {
   ) {
     this.cache = new SimpleCache();
     this.cacheTtlSeconds = options.cacheTtlSeconds ?? 600;
+    const allowed = options.allowedNodeTypes ?? ALLOWED_NODE_TYPES;
+    this.allowedNodeTypes = allowed ? new Set(allowed) : null;
     if (options.workflowValidator) {
       this.workflowValidator = options.workflowValidator;
     } else {
@@ -133,16 +138,19 @@ export class MCPClient {
       params.mode ?? 'OR',
       params.limit ?? 20
     );
+    const filtered = this.allowedNodeTypes
+      ? nodes.filter((node) => this.allowedNodeTypes?.has(node.nodeType))
+      : nodes;
 
     const result: SearchNodesResult = {
-      nodes: nodes.map((node) => ({
+      nodes: filtered.map((node) => ({
         nodeType: node.nodeType,
         displayName: node.displayName,
         description: node.description,
         category: node.category,
         exampleConfig: params.includeExamples ? this.getExampleConfig(node.nodeType) : undefined,
       })),
-      total: nodes.length,
+      total: filtered.length,
     };
 
     this.cache.set(cacheKey, result, this.cacheTtlSeconds);
@@ -150,6 +158,9 @@ export class MCPClient {
   }
 
   async getNode(params: GetNodeParams): Promise<GetNodeResult> {
+    if (this.allowedNodeTypes && !this.allowedNodeTypes.has(params.nodeType)) {
+      throw new Error(`Node type not allowed: ${params.nodeType}`);
+    }
     const cacheKey = `node:${params.nodeType}:${params.detail ?? 'standard'}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
@@ -181,6 +192,17 @@ export class MCPClient {
   }
 
   async validateWorkflow(workflow: WorkflowDefinition): Promise<ValidationResult> {
+    const disallowed = this.validateAllowedNodes(workflow);
+    if (disallowed.length > 0) {
+      return {
+        isValid: false,
+        errors: disallowed,
+        warnings: [],
+        suggestions: [],
+        statistics: this.buildBasicStatistics(workflow),
+      };
+    }
+
     const result = await this.workflowValidator.validateWorkflow(workflow, {
       validateNodes: true,
       validateConnections: true,
@@ -228,6 +250,39 @@ export class MCPClient {
         prop.required ||
         ['resource', 'operation', 'url', 'method', 'authentication'].includes(prop.name)
     );
+  }
+
+  private validateAllowedNodes(workflow: WorkflowDefinition): ValidationIssue[] {
+    if (!this.allowedNodeTypes) {
+      return [];
+    }
+
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    return nodes
+      .filter((node) => {
+        const type = node?.type as string | undefined;
+        return Boolean(type) && !this.allowedNodeTypes?.has(type);
+      })
+      .map((node) => ({
+        type: 'error',
+        nodeId: node?.id as string | undefined,
+        nodeName: node?.name as string | undefined,
+        message: `Node type not allowed: ${node?.type}`,
+        code: 'NODE_TYPE_NOT_ALLOWED',
+      }));
+  }
+
+  private buildBasicStatistics(workflow: WorkflowDefinition): ValidationResult['statistics'] {
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    const triggerTypes = new Set(['n8n-nodes-base.webhook', 'n8n-nodes-base.scheduleTrigger']);
+    return {
+      totalNodes: nodes.length,
+      enabledNodes: nodes.length,
+      triggerNodes: nodes.filter((node) => triggerTypes.has((node?.type as string) || '')).length,
+      validConnections: 0,
+      invalidConnections: 0,
+      expressionsValidated: 0,
+    };
   }
 
   private getExampleConfig(_nodeType: string): object | undefined {

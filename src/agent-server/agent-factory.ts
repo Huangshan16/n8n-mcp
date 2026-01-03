@@ -6,6 +6,7 @@ import { SessionService } from '../agents/session-service';
 import { MCPClient } from '../agents/mcp-client';
 import { WorkflowArchitect } from '../agents/workflow-architect';
 import { HARDWARE_COMPONENTS, HardwareComponent } from '../agents/hardware-components';
+import { ALLOWED_NODE_TYPES } from '../agents/allowed-node-types';
 import { createDatabaseAdapter } from '../database/database-adapter';
 import { NodeRepository } from '../database/node-repository';
 import { resolveAgentDbPath } from '../agents/agent-db-path';
@@ -42,7 +43,11 @@ export async function createAgentStack(options: AgentStackOptions = {}) {
   const nodeAdapter = options.mcpClient ? null : await createDatabaseAdapter(nodeDbPath);
   const nodeRepository = nodeAdapter ? new NodeRepository(nodeAdapter) : null;
 
-  const mcpClient = options.mcpClient ?? new MCPClient(nodeRepository!);
+  const mcpClient =
+    options.mcpClient ??
+    new MCPClient(nodeRepository!, {
+      allowedNodeTypes: ALLOWED_NODE_TYPES,
+    });
   const workflowArchitect =
     options.workflowArchitect ??
     new WorkflowArchitect(llmClient, mcpClient, {

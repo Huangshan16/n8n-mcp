@@ -38,6 +38,7 @@ function renderErrorPatterns(): string {
 export function buildArchitectSystemPrompt(
   hardwareComponents: HardwareComponent[],
   toolDescriptions: string[],
+  allowedNodeTypes: string[],
   variant?: PromptVariant
 ): string {
   return `
@@ -52,7 +53,7 @@ ${toolDescriptions.map((line) => `- ${line}`).join('\n')}
 # 工作流生成规范
 1. 先search_nodes，再get_node，最后validate_workflow
 2. HTTP节点用于调用硬件API，优先使用硬件组件defaultConfig
-3. 使用if/switch处理条件分支，使用code处理复杂逻辑
+3. 只能使用白名单节点：${allowedNodeTypes.join(', ')}
 4. 连接格式必须符合n8n标准
 5. 节点位置从[100, 200]开始，水平间隔220
 
