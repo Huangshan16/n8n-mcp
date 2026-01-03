@@ -24,12 +24,12 @@ function App() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 p-4">
+    <div className="flex h-screen flex-col gap-4 overflow-hidden p-4">
       <Header status={status} />
 
-      <div className="flex flex-1 flex-col gap-4 lg:flex-row">
-        <div className="flex flex-1 flex-col gap-4">
-          <div className="flex-[2]">
+      <div className="flex flex-1 flex-col gap-4 lg:flex-row min-h-0">
+        <div className="flex flex-1 flex-col gap-4 min-h-0">
+          <div className="flex-[2] min-h-0">
             <Suspense
               fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
             >
@@ -38,8 +38,8 @@ function App() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4">
-          <div className="flex-[2]">
+        <div className="flex flex-1 flex-col gap-4 min-h-0">
+          <div className="flex-[2] min-h-0">
             <ChatInterface
               messages={messages}
               onSend={sendMessage}

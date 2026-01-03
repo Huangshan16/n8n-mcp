@@ -36,7 +36,7 @@ export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBu
   };
 
   return (
-    <section className="glass-panel relative flex h-full flex-col overflow-hidden rounded-3xl">
+    <section className="glass-panel relative flex h-full min-h-0 flex-col overflow-hidden rounded-3xl">
       <div className="neural-grid" />
       <div className="relative z-10 flex items-center justify-between border-b border-cyan-500/10 px-6 py-4">
         <div>
