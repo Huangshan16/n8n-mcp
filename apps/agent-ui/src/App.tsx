@@ -39,6 +39,16 @@ function App() {
       <div className="flex flex-1 flex-col gap-4 lg:flex-row">
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex-[2]">
+            <Suspense
+              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
+            >
+              <N8nIframe refreshToken={refreshToken} />
+            </Suspense>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-4">
+          <div className="flex-[2]">
             <ChatInterface
               messages={messages}
               onSend={sendMessage}
@@ -46,30 +56,6 @@ function App() {
               status={status}
               isBusy={isBusy}
             />
-          </div>
-          <div className="flex-1">
-            <Suspense
-              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
-            >
-              <HardwareTwinPlaceholder />
-            </Suspense>
-          </div>
-        </div>
-
-        <div className="flex flex-1 flex-col gap-4">
-          <div className="flex-[2]">
-            <Suspense
-              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
-            >
-              <N8nIframe refreshToken={refreshToken} />
-            </Suspense>
-          </div>
-          <div className="flex-1">
-            <Suspense
-              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
-            >
-              <SystemLogPlaceholder />
-            </Suspense>
           </div>
         </div>
       </div>
