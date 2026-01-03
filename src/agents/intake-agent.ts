@@ -6,6 +6,7 @@ import { ScenarioMatcher } from './scenario-matcher';
 import { SessionService } from './session-service';
 import { AgentResponse, Scenario } from './types';
 import { GUIDANCE_QUESTION_PROMPT } from './prompts';
+import { logger } from '../utils/logger';
 
 export class IntakeAgent {
   constructor(
@@ -18,15 +19,33 @@ export class IntakeAgent {
   ) {}
 
   async processUserInput(userMessage: string, sessionId: string): Promise<AgentResponse> {
+    logger.debug('IntakeAgent: processing message', { sessionId, messageLength: userMessage.length });
     this.sessionService.appendTurn(sessionId, 'user', userMessage);
 
     const intent = await this.intentClassifier.classify(userMessage);
     const matchedScenarios = await this.scenarioMatcher.match(intent);
     const primaryScenario = matchedScenarios[0];
+    logger.debug('IntakeAgent: intent and match summary', {
+      sessionId,
+      intent,
+      matchedCount: matchedScenarios.length,
+      primaryScenarioId: primaryScenario?.id ?? null,
+      primaryScenarioName: primaryScenario?.name ?? null,
+    });
 
     if (primaryScenario && this.isConverged(primaryScenario, intent.confidence)) {
       const command = this.commandGenerator.generate(primaryScenario);
       const commandText = this.commandGenerator.serializeCommand(command);
+      logger.debug('IntakeAgent: converged on scenario', {
+        sessionId,
+        scenarioId: primaryScenario.id,
+        confidence: intent.confidence,
+        requiredParams: primaryScenario.requiredParams.map((param) => ({
+          name: param.name,
+          value: param.value ?? param.default ?? null,
+          required: param.required,
+        })),
+      });
 
       const response: AgentResponse = {
         type: 'command_ready',
@@ -40,6 +59,10 @@ export class IntakeAgent {
     }
 
     const question = await this.generateGuidanceQuestion(intent, primaryScenario);
+    logger.debug('IntakeAgent: guidance generated', {
+      sessionId,
+      questionLength: question.length,
+    });
     const response: AgentResponse = {
       type: 'guidance',
       message: question,
@@ -74,6 +97,11 @@ export class IntakeAgent {
       .replace('{missingParams}', JSON.stringify(missingParams.map((param) => param.description || param.name)));
 
     try {
+      logger.debug('IntakeAgent: generating guidance with LLM', {
+        scenarioId: scenario.id,
+        confirmedCount: confirmedParams.length,
+        missingCount: missingParams.length,
+      });
       const response = await this.llmClient.chat([
         { role: 'system', content: prompt },
         { role: 'user', content: '请生成引导问题。' },
@@ -82,6 +110,7 @@ export class IntakeAgent {
         return response.trim();
       }
     } catch {
+      logger.warn('IntakeAgent: LLM guidance failed, using fallback');
       // Fall back to heuristic question below.
     }
 

@@ -1,4 +1,5 @@
 import { SimpleCache } from '../utils/simple-cache';
+import { logger } from '../utils/logger';
 import { LLMClient } from './llm-client';
 import { Intent, IntentCategory, Entity } from './types';
 import { INTENT_CLASSIFICATION_PROMPT } from './prompts';
@@ -31,11 +32,19 @@ export class IntentClassifier {
     const cacheKey = `intent:${userMessage}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
+      logger.debug('IntentClassifier: cache hit', { cacheKey });
       return cached as Intent;
     }
 
     try {
+      logger.debug('IntentClassifier: calling LLM for intent', { messageLength: userMessage.length });
       const intent = await this.llmClient.classify(INTENT_CLASSIFICATION_PROMPT, userMessage);
+      logger.debug('IntentClassifier: LLM intent result', {
+        category: intent.category,
+        subCategory: intent.subCategory ?? null,
+        confidence: intent.confidence,
+        entities: intent.entities,
+      });
       this.cache.set(cacheKey, intent, this.cacheTtlSeconds);
       return intent;
     } catch (error) {
@@ -43,7 +52,14 @@ export class IntentClassifier {
         throw error;
       }
 
+      logger.warn('IntentClassifier: LLM failed, falling back to rules', error);
       const intent = this.classifyWithRules(userMessage);
+      logger.debug('IntentClassifier: rule-based intent result', {
+        category: intent.category,
+        subCategory: intent.subCategory ?? null,
+        confidence: intent.confidence,
+        entities: intent.entities,
+      });
       this.cache.set(cacheKey, intent, this.cacheTtlSeconds);
       return intent;
     }

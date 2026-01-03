@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { AgentConfig } from './agent-config';
 import { Intent } from './types';
+import { logger } from '../utils/logger';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -27,6 +28,12 @@ export class OpenAILLMClient implements LLMClient {
   }
 
   async classify(systemPrompt: string, userMessage: string): Promise<Intent> {
+    logger.debug('OpenAILLMClient: classify request', {
+      model: this.model,
+      baseUrl: this.client.baseURL ?? null,
+      userMessageLength: userMessage.length,
+      systemPromptLength: systemPrompt.length,
+    });
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [
@@ -38,15 +45,48 @@ export class OpenAILLMClient implements LLMClient {
       response_format: { type: 'json_object' },
     });
 
-    const content = response.choices[0]?.message?.content;
+    const choices = Array.isArray(response.choices) ? response.choices : [];
+    const choice = choices[0];
+    const content = choice?.message?.content;
     if (!content) {
+      logger.warn('OpenAILLMClient: classify response missing content', {
+        model: this.model,
+        choiceCount: choices.length,
+        responseMeta: {
+          id: (response as any)?.id ?? null,
+          object: (response as any)?.object ?? null,
+          model: (response as any)?.model ?? null,
+          usage: (response as any)?.usage ?? null,
+          error: (response as any)?.error ?? null,
+          keys: response && typeof response === 'object' ? Object.keys(response as any) : [],
+        },
+      });
       throw new Error('LLM response missing content');
     }
 
-    return JSON.parse(content) as Intent;
+    logger.debug('OpenAILLMClient: classify response received', {
+      model: this.model,
+      contentLength: content.length,
+    });
+    try {
+      return JSON.parse(content) as Intent;
+    } catch (error) {
+      logger.warn('OpenAILLMClient: classify response not valid JSON', {
+        model: this.model,
+        contentSnippet: content.slice(0, 200),
+      });
+      throw error;
+    }
   }
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+    logger.debug('OpenAILLMClient: chat request', {
+      model: this.model,
+      baseUrl: this.client.baseURL ?? null,
+      messageCount: messages.length,
+      temperature: options?.temperature ?? 0.7,
+      maxTokens: options?.maxTokens ?? 1000,
+    });
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages,
@@ -54,7 +94,12 @@ export class OpenAILLMClient implements LLMClient {
       max_tokens: options?.maxTokens ?? 1000,
     });
 
-    return response.choices[0]?.message?.content || '';
+    const content = response.choices?.[0]?.message?.content || '';
+    logger.debug('OpenAILLMClient: chat response received', {
+      model: this.model,
+      contentLength: content.length,
+    });
+    return content;
   }
 }
 

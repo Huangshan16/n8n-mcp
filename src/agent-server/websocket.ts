@@ -24,6 +24,10 @@ export function attachWebSocketServer(server: Server, agentService: AgentService
         }
 
         if (payload.type === 'user_message' && payload.message) {
+          logger.debug('WebSocket: user message received', {
+            sessionId: payload.sessionId ?? null,
+            messageLength: payload.message.length,
+          });
           const result = await agentService.chat(payload.message, payload.sessionId);
           socket.send(
             JSON.stringify({

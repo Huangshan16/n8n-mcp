@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { AgentSession, ConversationTurn } from './types';
+import { logger } from '../utils/logger';
 
 export interface SessionServiceOptions {
   ttlMs?: number;
@@ -35,6 +36,7 @@ export class SessionService {
       expiresAt: this.getExpiryIso(),
     };
     this.sessions.set(id, session);
+    logger.debug('SessionService: created session', { sessionId: id });
     return session;
   }
 
@@ -47,6 +49,11 @@ export class SessionService {
     }
 
     this.refresh(session);
+    logger.debug('SessionService: appended turn', {
+      sessionId,
+      role,
+      totalTurns: session.history.length,
+    });
     return session;
   }
 
@@ -68,6 +75,7 @@ export class SessionService {
     this.sessions.forEach((session, id) => {
       if (this.isExpired(session)) {
         this.sessions.delete(id);
+        logger.debug('SessionService: pruned expired session', { sessionId: id });
       }
     });
   }

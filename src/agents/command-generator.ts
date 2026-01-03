@@ -1,4 +1,5 @@
 import { CommandInstruction, Scenario } from './types';
+import { logger } from '../utils/logger';
 
 export class CommandGenerator {
   generate(scenario: Scenario): CommandInstruction {
@@ -9,6 +10,11 @@ export class CommandGenerator {
       if (value !== null && value !== undefined) {
         params[param.name] = value;
       }
+    });
+
+    logger.debug('CommandGenerator: generated command params', {
+      scenarioId: scenario.id,
+      paramKeys: Object.keys(params),
     });
 
     return {

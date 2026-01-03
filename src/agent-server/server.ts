@@ -5,6 +5,7 @@ import { AgentService } from './agent-service';
 import { WorkflowService } from '../agents/workflow-service';
 import { ScenarioRepository } from '../agents/scenario-repository';
 import { attachWebSocketServer } from './websocket';
+import { logger } from '../utils/logger';
 
 export interface AgentHttpServerOptions {
   port?: number;
@@ -42,9 +43,11 @@ export class AgentHttpServer {
       }
 
       try {
+        logger.debug('HTTP chat request', { sessionId: sessionId ?? null, messageLength: message.length });
         const result = await this.agentService.chat(message, sessionId);
         res.json(result);
       } catch (error) {
+        logger.warn('HTTP chat error', error);
         res.status(500).json({ error: error instanceof Error ? error.message : 'Agent error' });
       }
     });
@@ -59,9 +62,14 @@ export class AgentHttpServer {
       }
 
       try {
+        logger.debug('HTTP workflow create request', {
+          scenarioId,
+          paramKeys: Object.keys(params),
+        });
         const result = await this.workflowService.createWorkflow(scenarioId, params);
         res.json(result);
       } catch (error) {
+        logger.warn('HTTP workflow create error', error);
         res.status(400).json({ error: error instanceof Error ? error.message : 'Workflow error' });
       }
     });

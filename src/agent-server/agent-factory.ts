@@ -7,6 +7,7 @@ import { createLLMClient, LLMClient } from '../agents/llm-client';
 import { ScenarioMatcher } from '../agents/scenario-matcher';
 import { ScenarioRepository } from '../agents/scenario-repository';
 import { SessionService } from '../agents/session-service';
+import { logger } from '../utils/logger';
 import { AgentService } from './agent-service';
 
 export interface AgentStackOptions {
@@ -18,6 +19,13 @@ export interface AgentStackOptions {
 
 export async function createAgentStack(options: AgentStackOptions = {}) {
   const config = options.config ?? loadAgentConfig();
+  logger.info('Agent stack config', {
+    provider: config.llmProvider,
+    model: config.llmModel,
+    hasBaseUrl: Boolean(config.llmBaseUrl),
+    maxTurns: config.maxConversationTurns,
+    convergenceThreshold: config.convergenceThreshold,
+  });
   const llmClient = options.llmClient ?? createLLMClient(config);
   const scenarioRepository = await ScenarioRepository.create({
     dbPath: options.scenarioDbPath,

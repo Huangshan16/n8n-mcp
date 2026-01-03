@@ -1,5 +1,6 @@
 import { HardwareService } from './hardware-service';
 import { Intent, Scenario, ScenarioParameter } from './types';
+import { logger } from '../utils/logger';
 
 export interface ScenarioRepositoryLike {
   findByIntent(category: string, subCategory?: string): Promise<Scenario[]>;
@@ -14,19 +15,35 @@ export class ScenarioMatcher {
   async match(intent: Intent): Promise<Scenario[]> {
     const candidates = await this.scenarioRepository.findByIntent(intent.category, intent.subCategory);
     if (candidates.length === 0) {
+      logger.debug('ScenarioMatcher: no candidates', {
+        category: intent.category,
+        subCategory: intent.subCategory ?? null,
+      });
       return [];
     }
 
     const inferredComponents = this.hardwareService.inferComponentsFromIntent(intent);
 
-    return candidates
+    const scored = candidates
       .map((scenario) => {
         const hydrated = this.applyIntentToScenario(scenario, intent);
         const score = this.calculateSimilarity(hydrated, intent, inferredComponents);
         return { scenario: hydrated, score };
       })
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.scenario);
+      .sort((a, b) => b.score - a.score);
+
+    logger.debug('ScenarioMatcher: scored candidates', {
+      category: intent.category,
+      subCategory: intent.subCategory ?? null,
+      inferredComponents,
+      topMatches: scored.slice(0, 3).map((entry) => ({
+        id: entry.scenario.id,
+        name: entry.scenario.name,
+        score: Number(entry.score.toFixed(3)),
+      })),
+    });
+
+    return scored.map((entry) => entry.scenario);
   }
 
   private calculateSimilarity(scenario: Scenario, intent: Intent, inferredComponents: string[]): number {
