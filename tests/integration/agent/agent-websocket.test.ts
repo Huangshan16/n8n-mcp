@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import WebSocket from 'ws';
 import { AgentHttpServer } from '../../../src/agent-server/server';
 import { createAgentStack } from '../../../src/agent-server/agent-factory';
-
-function createTempDbPath(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'n8n-mcp-agent-ws-'));
-  return path.join(dir, 'agent.db');
-}
 
 function waitForMessage(ws: WebSocket): Promise<string> {
   return new Promise((resolve) => {
@@ -19,15 +11,14 @@ function waitForMessage(ws: WebSocket): Promise<string> {
 
 describe('Agent WebSocket integration', () => {
   it('responds to chat messages', async () => {
-    const dbPath = createTempDbPath();
     const llmClient = {
-      classify: async () => ({
-        category: 'robot_task',
-        subCategory: 'face_recognition_action',
-        entities: [],
-        confidence: 0.95,
-      }),
-      chat: async () => '需要补充动作吗？',
+      chat: async () =>
+        JSON.stringify({
+          category: 'game_interaction',
+          entities: { game_type: 'rps' },
+          confidence: 0.9,
+          missingInfo: [],
+        }),
     };
 
     const config = {
@@ -38,11 +29,22 @@ describe('Agent WebSocket integration', () => {
       convergenceThreshold: 0.7,
     };
 
-    const { agentService, scenarioRepository } = await createAgentStack({
+    const workflowArchitect = {
+      generateWorkflow: async () => ({
+        success: true,
+        workflow: { name: 'Demo', nodes: [], connections: {} },
+        iterations: 1,
+        reasoning: 'test',
+      }),
+    } as any;
+    const mcpClient = { searchNodes: async () => ({ nodes: [], total: 0 }), getNode: async () => ({}) } as any;
+
+    const { agentService, close } = await createAgentStack({
       config,
       llmClient,
-      scenarioDbPath: dbPath,
-      seed: true,
+      workflowArchitect,
+      mcpClient,
+      hardwareComponents: [],
     });
 
     const workflowService = {
@@ -53,7 +55,7 @@ describe('Agent WebSocket integration', () => {
       }),
     } as any;
 
-    const server = new AgentHttpServer(agentService, workflowService, scenarioRepository);
+    const server = new AgentHttpServer(agentService, workflowService);
     const { port } = await server.start({ host: '127.0.0.1', port: 0 });
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
@@ -66,12 +68,12 @@ describe('Agent WebSocket integration', () => {
       const payload = JSON.parse(response);
 
       expect(payload.type).toBe('agent_response');
-      expect(payload.response.message).toContain('补充');
+      expect(payload.response.type).toBe('workflow_ready');
+      expect(payload.response.message).toContain('工作流');
     } finally {
       ws.close();
       await server.stop();
-      scenarioRepository.close();
-      fs.rmSync(path.dirname(dbPath), { recursive: true, force: true });
+      close();
     }
   });
 });

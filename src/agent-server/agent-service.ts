@@ -23,4 +23,8 @@ export class AgentService {
   getSession(sessionId: string) {
     return this.sessionService.getSession(sessionId);
   }
+
+  getWorkflow(sessionId: string) {
+    return this.sessionService.getWorkflow(sessionId);
+  }
 }

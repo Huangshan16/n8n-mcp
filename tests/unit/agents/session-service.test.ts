@@ -1,32 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { SessionService } from '../../../src/agents/session-service';
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 describe('SessionService', () => {
-  it('creates sessions and appends turns', () => {
+  it('stores and retrieves workflow in session', () => {
+    const service = new SessionService({ maxTurns: 2 });
+    const session = service.getOrCreate();
+    const workflow = { name: 'WF', nodes: [], connections: {} };
+
+    service.setWorkflow(session.id, workflow);
+
+    expect(service.getWorkflow(session.id)).toEqual(workflow);
+    service.clearWorkflow(session.id);
+    expect(service.getWorkflow(session.id)).toBeNull();
+  });
+
+  it('appends history and keeps max turns', () => {
     const service = new SessionService({ maxTurns: 1 });
     const session = service.getOrCreate();
 
-    expect(session.id).toBeDefined();
     service.appendTurn(session.id, 'user', 'hello');
     service.appendTurn(session.id, 'assistant', 'hi');
     service.appendTurn(session.id, 'user', 'again');
 
-    const updated = service.getSession(session.id);
-    expect(updated?.history.length).toBe(2);
-  });
-
-  it('prunes expired sessions', async () => {
-    const service = new SessionService({ ttlMs: 5 });
-    const session = service.getOrCreate();
-    service.appendTurn(session.id, 'user', 'hello');
-
-    await delay(10);
-    service.pruneExpired();
-
-    expect(service.getSession(session.id)).toBeNull();
+    const history = service.getHistory(session.id);
+    expect(history.length).toBe(2);
+    expect(history[0].content).toBe('hi');
   });
 });

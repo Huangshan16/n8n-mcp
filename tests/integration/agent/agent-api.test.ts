@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import { AgentHttpServer } from '../../../src/agent-server/server';
 import { createAgentStack } from '../../../src/agent-server/agent-factory';
-
-function createTempDbPath(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'n8n-mcp-agent-integration-'));
-  return path.join(dir, 'agent.db');
-}
 
 async function postJson(url: string, body: unknown) {
   const response = await fetch(url, {
@@ -20,16 +12,15 @@ async function postJson(url: string, body: unknown) {
 }
 
 describe('Agent API integration', () => {
-  it('handles chat flow and scenario listing', async () => {
-    const dbPath = createTempDbPath();
+  it('handles chat flow and workflow creation', async () => {
     const llmClient = {
-      classify: async () => ({
-        category: 'robot_task',
-        subCategory: 'face_recognition_action',
-        entities: [{ type: 'person', value: '老刘' }],
-        confidence: 0.9,
-      }),
-      chat: async () => '需要补充动作和语音吗？',
+      chat: async () =>
+        JSON.stringify({
+          category: 'game_interaction',
+          entities: { game_type: 'rps' },
+          confidence: 0.9,
+          missingInfo: [],
+        }),
     };
 
     const config = {
@@ -40,11 +31,23 @@ describe('Agent API integration', () => {
       convergenceThreshold: 0.7,
     };
 
-    const { agentService, scenarioRepository } = await createAgentStack({
+    const workflow = { name: 'Demo', nodes: [], connections: {} };
+    const workflowArchitect = {
+      generateWorkflow: async () => ({
+        success: true,
+        workflow,
+        iterations: 1,
+        reasoning: 'test',
+      }),
+    } as any;
+    const mcpClient = { searchNodes: async () => ({ nodes: [], total: 0 }), getNode: async () => ({}) } as any;
+
+    const { agentService, close } = await createAgentStack({
       config,
       llmClient,
-      scenarioDbPath: dbPath,
-      seed: true,
+      workflowArchitect,
+      mcpClient,
+      hardwareComponents: [],
     });
 
     const workflowService = {
@@ -55,7 +58,7 @@ describe('Agent API integration', () => {
       }),
     } as any;
 
-    const server = new AgentHttpServer(agentService, workflowService, scenarioRepository);
+    const server = new AgentHttpServer(agentService, workflowService);
     const { port } = await server.start({ host: '127.0.0.1', port: 0 });
 
     try {
@@ -65,15 +68,16 @@ describe('Agent API integration', () => {
 
       expect(chatResult.response.status).toBe(200);
       expect(chatResult.data.sessionId).toBeTruthy();
-      expect(chatResult.data.response.type).toBe('guidance');
+      expect(chatResult.data.response.type).toBe('workflow_ready');
 
-      const scenariosResponse = await fetch(`http://127.0.0.1:${port}/api/scenarios`);
-      const scenariosPayload = await scenariosResponse.json();
-      expect(scenariosPayload.scenarios.length).toBeGreaterThan(0);
+      const workflowResult = await postJson(`http://127.0.0.1:${port}/api/workflow/create`, {
+        sessionId: chatResult.data.sessionId,
+      });
+      expect(workflowResult.response.status).toBe(200);
+      expect(workflowResult.data.workflowId).toBe('wf-1');
     } finally {
       await server.stop();
-      scenarioRepository.close();
-      fs.rmSync(path.dirname(dbPath), { recursive: true, force: true });
+      close();
     }
   });
 });

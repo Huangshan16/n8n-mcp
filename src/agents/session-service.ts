@@ -57,6 +57,33 @@ export class SessionService {
     return session;
   }
 
+  getHistory(sessionId: string): ConversationTurn[] {
+    const session = this.getSession(sessionId);
+    return session ? [...session.history] : [];
+  }
+
+  setWorkflow(sessionId: string, workflow: AgentSession['workflow']): void {
+    const session = this.getOrCreate(sessionId);
+    session.workflow = workflow;
+    this.refresh(session);
+    logger.debug('SessionService: stored workflow', { sessionId, workflowName: workflow?.name });
+  }
+
+  getWorkflow(sessionId: string): AgentSession['workflow'] | null {
+    const session = this.getSession(sessionId);
+    return session?.workflow ?? null;
+  }
+
+  clearWorkflow(sessionId: string): void {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return;
+    }
+    session.workflow = undefined;
+    this.refresh(session);
+    logger.debug('SessionService: cleared workflow', { sessionId });
+  }
+
   getSession(sessionId: string): AgentSession | null {
     const session = this.sessions.get(sessionId);
     if (!session) {

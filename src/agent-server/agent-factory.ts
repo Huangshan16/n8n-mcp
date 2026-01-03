@@ -1,20 +1,24 @@
 import { AgentConfig, loadAgentConfig } from '../agents/agent-config';
-import { CommandGenerator } from '../agents/command-generator';
 import { HardwareService } from '../agents/hardware-service';
 import { IntakeAgent } from '../agents/intake-agent';
-import { IntentClassifier } from '../agents/intent-classifier';
 import { createLLMClient, LLMClient } from '../agents/llm-client';
-import { ScenarioMatcher } from '../agents/scenario-matcher';
-import { ScenarioRepository } from '../agents/scenario-repository';
 import { SessionService } from '../agents/session-service';
+import { MCPClient } from '../agents/mcp-client';
+import { WorkflowArchitect } from '../agents/workflow-architect';
+import { HARDWARE_COMPONENTS, HardwareComponent } from '../agents/hardware-components';
+import { createDatabaseAdapter } from '../database/database-adapter';
+import { NodeRepository } from '../database/node-repository';
+import { resolveAgentDbPath } from '../agents/agent-db-path';
 import { logger } from '../utils/logger';
 import { AgentService } from './agent-service';
 
 export interface AgentStackOptions {
   config?: AgentConfig;
   llmClient?: LLMClient;
-  scenarioDbPath?: string;
-  seed?: boolean;
+  mcpClient?: MCPClient;
+  workflowArchitect?: WorkflowArchitect;
+  hardwareComponents?: HardwareComponent[];
+  nodeDbPath?: string;
 }
 
 export async function createAgentStack(options: AgentStackOptions = {}) {
@@ -27,14 +31,16 @@ export async function createAgentStack(options: AgentStackOptions = {}) {
     convergenceThreshold: config.convergenceThreshold,
   });
   const llmClient = options.llmClient ?? createLLMClient(config);
-  const scenarioRepository = await ScenarioRepository.create({
-    dbPath: options.scenarioDbPath,
-    seed: options.seed,
-  });
   const hardwareService = new HardwareService();
-  const scenarioMatcher = new ScenarioMatcher(scenarioRepository, hardwareService);
-  const intentClassifier = new IntentClassifier(llmClient, { fallbackOnError: true });
-  const commandGenerator = new CommandGenerator();
+  const hardwareComponents = options.hardwareComponents ?? HARDWARE_COMPONENTS;
+
+  const nodeDbPath = options.nodeDbPath ?? resolveAgentDbPath();
+  const nodeAdapter = options.mcpClient ? null : await createDatabaseAdapter(nodeDbPath);
+  const nodeRepository = nodeAdapter ? new NodeRepository(nodeAdapter) : null;
+
+  const mcpClient = options.mcpClient ?? new MCPClient(nodeRepository!);
+  const workflowArchitect =
+    options.workflowArchitect ?? new WorkflowArchitect(llmClient, mcpClient);
   const sessionService = new SessionService({
     maxTurns: config.maxConversationTurns,
   });
@@ -42,17 +48,18 @@ export async function createAgentStack(options: AgentStackOptions = {}) {
   const intakeAgent = new IntakeAgent(
     config,
     llmClient,
-    intentClassifier,
-    scenarioMatcher,
-    commandGenerator,
-    sessionService
+    workflowArchitect,
+    hardwareService,
+    sessionService,
+    hardwareComponents
   );
 
   const agentService = new AgentService(intakeAgent, sessionService);
 
   return {
     agentService,
-    scenarioRepository,
     sessionService,
+    nodeRepository,
+    close: () => nodeAdapter?.close(),
   };
 }

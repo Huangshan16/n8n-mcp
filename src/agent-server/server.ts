@@ -2,8 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { AgentService } from './agent-service';
-import { WorkflowService } from '../agents/workflow-service';
-import { ScenarioRepository } from '../agents/scenario-repository';
+import { WorkflowDeployer } from '../agents/workflow-service';
 import { attachWebSocketServer } from './websocket';
 import { logger } from '../utils/logger';
 
@@ -17,8 +16,7 @@ export class AgentHttpServer {
 
   constructor(
     private agentService: AgentService,
-    private workflowService: WorkflowService,
-    private scenarioRepository: ScenarioRepository
+    private workflowDeployer: WorkflowDeployer
   ) {}
 
   async start(options: AgentHttpServerOptions = {}): Promise<{ port: number; host: string }> {
@@ -53,33 +51,27 @@ export class AgentHttpServer {
     });
 
     app.post('/api/workflow/create', async (req, res) => {
-      const scenarioId = req.body?.scenarioId as string | undefined;
-      const params = (req.body?.params as Record<string, unknown> | undefined) ?? {};
-
-      if (!scenarioId) {
-        res.status(400).json({ error: 'scenarioId is required' });
-        return;
-      }
-
       try {
+        const workflow = req.body?.workflow as Record<string, unknown> | undefined;
+        const sessionId = req.body?.sessionId as string | undefined;
+
+        const resolvedWorkflow =
+          (workflow as any) ?? (sessionId ? this.agentService.getWorkflow(sessionId) : null);
+
+        if (!resolvedWorkflow) {
+          res.status(400).json({ error: 'workflow or sessionId is required' });
+          return;
+        }
+
         logger.debug('HTTP workflow create request', {
-          scenarioId,
-          paramKeys: Object.keys(params),
+          workflowName: resolvedWorkflow.name ?? null,
+          nodeCount: Array.isArray(resolvedWorkflow.nodes) ? resolvedWorkflow.nodes.length : 0,
         });
-        const result = await this.workflowService.createWorkflow(scenarioId, params);
+        const result = await this.workflowDeployer.createWorkflow(resolvedWorkflow as any);
         res.json(result);
       } catch (error) {
         logger.warn('HTTP workflow create error', error);
         res.status(400).json({ error: error instanceof Error ? error.message : 'Workflow error' });
-      }
-    });
-
-    app.get('/api/scenarios', async (_req, res) => {
-      try {
-        const scenarios = await this.scenarioRepository.list();
-        res.json({ scenarios });
-      } catch (error) {
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Scenario error' });
       }
     });
 
