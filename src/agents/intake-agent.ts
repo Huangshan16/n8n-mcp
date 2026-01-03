@@ -3,11 +3,13 @@ import { LLMClient } from './llm-client';
 import { WorkflowArchitect } from './workflow-architect';
 import { HardwareService } from './hardware-service';
 import { SessionService } from './session-service';
-import { AgentResponse, ConversationTurn, Intent } from './types';
+import { AgentResponse, ConversationTurn, Intent, WorkflowBlueprint } from './types';
 import { HardwareComponent } from './hardware-components';
 import { logger } from '../utils/logger';
 
 export class IntakeAgent {
+  private static readonly SUMMARY_CADENCE = 3;
+
   constructor(
     private config: AgentConfig,
     private llmClient: LLMClient,
@@ -23,20 +25,29 @@ export class IntakeAgent {
     const history = this.sessionService.getHistory(sessionId);
 
     const intent = await this.extractIntent(userMessage, history);
-    const missingInfo = this.checkMissingInfo(intent);
+    const blueprint = this.buildBlueprint(userMessage, intent);
+    this.sessionService.setBlueprint(sessionId, blueprint);
+
+    const missingInfo = blueprint.missingFields;
     logger.debug('IntakeAgent: intent summary', {
       sessionId,
       intent,
       missingInfo,
     });
 
-    if (missingInfo.length > 0) {
-      const question = await this.generateGuidanceQuestion(intent, missingInfo);
+    const shouldSummarize = this.sessionService.shouldSummarize(
+      sessionId,
+      IntakeAgent.SUMMARY_CADENCE
+    );
+
+    if (shouldSummarize || missingInfo.length === 0) {
       const response: AgentResponse = {
-        type: 'guidance',
-        message: question,
+        type: 'summary_ready',
+        message: this.renderBlueprintSummary(blueprint),
+        blueprint,
       };
       this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+      this.sessionService.markSummary(sessionId);
       return response;
     }
 
@@ -49,45 +60,13 @@ export class IntakeAgent {
       return response;
     }
 
-    try {
-      const components = this.resolveHardwareComponents(intent);
-      const result = await this.workflowArchitect.generateWorkflow({
-        userIntent: userMessage,
-        entities: intent.entities,
-        hardwareComponents: components,
-        conversationHistory: history,
-      });
-
-      if (!result.success || !result.workflow) {
-        return {
-          type: 'error',
-          message: `工作流生成失败：${result.validationResult?.errors[0]?.message || '未知错误'}`,
-          details: result.validationResult,
-        };
-      }
-
-      this.sessionService.setWorkflow(sessionId, result.workflow);
-
-      const response: AgentResponse = {
-        type: 'workflow_ready',
-        message: `已为您生成工作流「${result.workflow.name}」。`,
-        workflow: result.workflow,
-        reasoning: result.reasoning,
-        metadata: {
-          iterations: result.iterations,
-          nodeCount: result.workflow.nodes.length,
-        },
-      };
-
-      this.sessionService.appendTurn(sessionId, 'assistant', response.message);
-      return response;
-    } catch (error) {
-      logger.error('WorkflowArchitect error', error);
-      return {
-        type: 'error',
-        message: '抱歉，工作流生成过程中出现错误，请稍后重试。',
-      };
-    }
+    const question = await this.generateGuidanceQuestion(intent, missingInfo);
+    const response: AgentResponse = {
+      type: 'guidance',
+      message: question,
+    };
+    this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+    return response;
   }
 
   private async extractIntent(message: string, history: ConversationTurn[]): Promise<Intent> {
@@ -177,28 +156,6 @@ ${hardwareLines}
     return { category: 'custom', entities, confidence: 0.6 };
   }
 
-  private checkMissingInfo(intent: Intent): string[] {
-    if (intent.missingInfo && intent.missingInfo.length > 0) {
-      return intent.missingInfo;
-    }
-
-    const required: Record<string, string[]> = {
-      face_recognition_action: ['person_name', 'gesture', 'speech_content'],
-      emotion_interaction: ['emotion_mode'],
-      game_interaction: ['game_type'],
-    };
-
-    const missing: string[] = [];
-    const requiredFields = required[intent.category] || [];
-    requiredFields.forEach((field) => {
-      if (!intent.entities[field]) {
-        missing.push(field);
-      }
-    });
-
-    return missing;
-  }
-
   private async generateGuidanceQuestion(intent: Intent, missingInfo: string[]): Promise<string> {
     const readable = missingInfo.map((field) => this.humanizeField(field)).join('、');
     const prompt = `
@@ -241,5 +198,98 @@ ${hardwareLines}
       return this.hardwareComponents;
     }
     return this.hardwareComponents.filter((component) => inferred.includes(component.name));
+  }
+
+  private buildBlueprint(message: string, intent: Intent): WorkflowBlueprint {
+    const triggers: WorkflowBlueprint['triggers'] = [];
+    const logic: WorkflowBlueprint['logic'] = [];
+    const executors: WorkflowBlueprint['executors'] = [];
+    const missingFields = new Set<string>(intent.missingInfo ?? []);
+
+    const scheduleKeywords = ['定时', '每天', '每周', '每月', '每隔', '定期'];
+    const hasSchedule = scheduleKeywords.some((keyword) => message.includes(keyword));
+    if (hasSchedule) {
+      triggers.push({ type: 'scheduleTrigger', config: {} });
+      if (!message.match(/\d{1,2}[:点]\d{0,2}/)) {
+        missingFields.add('schedule_time');
+      }
+    } else {
+      triggers.push({ type: 'webhook', config: { path: 'camera-input' } });
+    }
+
+    const personMatches = Array.from(message.matchAll(/老[\u4e00-\u9fa5]{1,2}/g)).map((m) => m[0]);
+    const uniquePeople = Array.from(new Set(personMatches));
+    if (uniquePeople.length >= 1) {
+      logic.push({ type: 'if', config: { persons: uniquePeople } });
+    }
+    if (message.includes('循环') || message.includes('批量')) {
+      logic.push({ type: 'splitInBatches', config: {} });
+    }
+
+    executors.push({ type: 'set', config: {} });
+    executors.push({ type: 'httpRequest', config: {} });
+
+    const requiredByCategory: Record<string, string[]> = {
+      face_recognition_action: ['person_name', 'gesture', 'speech_content', 'tts_voice'],
+      emotion_interaction: ['emotion_mode'],
+      game_interaction: ['game_type'],
+    };
+
+    const requiredFields = requiredByCategory[intent.category] || [];
+    requiredFields.forEach((field) => {
+      if (!intent.entities[field]) {
+        missingFields.add(field);
+      }
+    });
+
+    if (intent.category === 'face_recognition_action') {
+      const gestureKeywords = ['竖中指', '比个V', '比V', '点赞', '挥手', '招手', '握手'];
+      const hasGesture = gestureKeywords.some((keyword) => message.includes(keyword));
+      if (!hasGesture) {
+        missingFields.add('gesture');
+      }
+
+      const hasSpeech = /["“][^"”]+["”]/.test(message) || message.includes('说');
+      if (!hasSpeech) {
+        missingFields.add('speech_content');
+      }
+
+      if (message.includes('音色')) {
+        const voiceMatch = message.match(/音色\s*([abc])/i);
+        if (!voiceMatch) {
+          missingFields.add('tts_voice');
+        }
+      } else {
+        missingFields.add('tts_voice');
+      }
+    }
+
+    return {
+      intentSummary: message.trim(),
+      triggers,
+      logic,
+      executors,
+      missingFields: Array.from(missingFields),
+    };
+  }
+
+  private renderBlueprintSummary(blueprint: WorkflowBlueprint): string {
+    const parts: string[] = [];
+    parts.push(`已整理当前逻辑：${blueprint.intentSummary}`);
+
+    if (blueprint.triggers.length > 0) {
+      parts.push(`触发器：${blueprint.triggers.map((t) => t.type).join(' / ')}`);
+    }
+    if (blueprint.logic.length > 0) {
+      parts.push(`逻辑：${blueprint.logic.map((l) => l.type).join(' / ')}`);
+    }
+    if (blueprint.executors.length > 0) {
+      parts.push(`执行：${blueprint.executors.map((e) => e.type).join(' / ')}`);
+    }
+    if (blueprint.missingFields.length > 0) {
+      parts.push(`还缺：${blueprint.missingFields.map((field) => this.humanizeField(field)).join('、')}`);
+    }
+
+    return parts.join('\n');
   }
 }

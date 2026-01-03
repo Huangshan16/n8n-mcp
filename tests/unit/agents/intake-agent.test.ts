@@ -43,7 +43,7 @@ describe('IntakeAgent', () => {
     expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
   });
 
-  it('returns workflow_ready when architect succeeds', async () => {
+  it('returns summary when missing info resolved', async () => {
     const llmClient = {
       chat: vi.fn().mockResolvedValue(
         JSON.stringify({
@@ -54,11 +54,10 @@ describe('IntakeAgent', () => {
         })
       ),
     };
-    const workflow = { name: 'RPS', nodes: [], connections: {} };
     const workflowArchitect = {
       generateWorkflow: vi.fn().mockResolvedValue({
         success: true,
-        workflow,
+        workflow: { name: 'RPS', nodes: [], connections: {} },
         iterations: 1,
         reasoning: 'test',
       }),
@@ -87,7 +86,8 @@ describe('IntakeAgent', () => {
     const session = sessionService.getOrCreate();
     const response = await agent.processUserInput('我要玩石头剪刀布', session.id);
 
-    expect(response.type).toBe('workflow_ready');
-    expect(sessionService.getWorkflow(session.id)?.name).toBe('RPS');
+    expect(response.type).toBe('summary_ready');
+    expect(response.blueprint?.intentSummary).toContain('石头剪刀布');
+    expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
   });
 });
