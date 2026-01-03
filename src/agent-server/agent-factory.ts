@@ -1,18 +1,28 @@
-import { loadAgentConfig } from '../agents/agent-config';
+import { AgentConfig, loadAgentConfig } from '../agents/agent-config';
 import { CommandGenerator } from '../agents/command-generator';
 import { HardwareService } from '../agents/hardware-service';
 import { IntakeAgent } from '../agents/intake-agent';
 import { IntentClassifier } from '../agents/intent-classifier';
-import { createLLMClient } from '../agents/llm-client';
+import { createLLMClient, LLMClient } from '../agents/llm-client';
 import { ScenarioMatcher } from '../agents/scenario-matcher';
 import { ScenarioRepository } from '../agents/scenario-repository';
 import { SessionService } from '../agents/session-service';
 import { AgentService } from './agent-service';
 
-export async function createAgentStack() {
-  const config = loadAgentConfig();
-  const llmClient = createLLMClient(config);
-  const scenarioRepository = await ScenarioRepository.create();
+export interface AgentStackOptions {
+  config?: AgentConfig;
+  llmClient?: LLMClient;
+  scenarioDbPath?: string;
+  seed?: boolean;
+}
+
+export async function createAgentStack(options: AgentStackOptions = {}) {
+  const config = options.config ?? loadAgentConfig();
+  const llmClient = options.llmClient ?? createLLMClient(config);
+  const scenarioRepository = await ScenarioRepository.create({
+    dbPath: options.scenarioDbPath,
+    seed: options.seed,
+  });
   const hardwareService = new HardwareService();
   const scenarioMatcher = new ScenarioMatcher(scenarioRepository, hardwareService);
   const intentClassifier = new IntentClassifier(llmClient, { fallbackOnError: true });

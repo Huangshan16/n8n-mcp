@@ -1,10 +1,20 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { ChatInterface } from './components/ChatInterface';
 import { Header } from './components/Header';
-import { HardwareTwinPlaceholder } from './components/HardwareTwinPlaceholder';
-import { N8nIframe } from './components/N8nIframe';
-import { SystemLogPlaceholder } from './components/SystemLogPlaceholder';
+const HardwareTwinPlaceholder = lazy(() =>
+  import('./components/HardwareTwinPlaceholder').then((module) => ({
+    default: module.HardwareTwinPlaceholder,
+  }))
+);
+const N8nIframe = lazy(() =>
+  import('./components/N8nIframe').then((module) => ({ default: module.N8nIframe }))
+);
+const SystemLogPlaceholder = lazy(() =>
+  import('./components/SystemLogPlaceholder').then((module) => ({
+    default: module.SystemLogPlaceholder,
+  }))
+);
 import { useAgentChat } from './hooks/useAgentChat';
 import type { WorkflowCommand } from './lib/commandParser';
 
@@ -38,16 +48,28 @@ function App() {
             />
           </div>
           <div className="flex-1">
-            <HardwareTwinPlaceholder />
+            <Suspense
+              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
+            >
+              <HardwareTwinPlaceholder />
+            </Suspense>
           </div>
         </div>
 
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex-[2]">
-            <N8nIframe refreshToken={refreshToken} />
+            <Suspense
+              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
+            >
+              <N8nIframe refreshToken={refreshToken} />
+            </Suspense>
           </div>
           <div className="flex-1">
-            <SystemLogPlaceholder />
+            <Suspense
+              fallback={<div className="glass-panel h-full rounded-3xl p-6 text-cyan-200/60">Loading...</div>}
+            >
+              <SystemLogPlaceholder />
+            </Suspense>
           </div>
         </div>
       </div>

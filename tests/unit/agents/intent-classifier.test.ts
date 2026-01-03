@@ -38,6 +38,19 @@ describe('IntentClassifier', () => {
     expect(result.confidence).toBeGreaterThan(0.5);
   });
 
+  it('caches classification results', async () => {
+    const llmClient = {
+      classify: vi.fn().mockResolvedValue(mockIntent),
+      chat: vi.fn(),
+    };
+
+    const classifier = new IntentClassifier(llmClient, { cacheTtlSeconds: 600 });
+    await classifier.classify('缓存测试');
+    await classifier.classify('缓存测试');
+
+    expect(llmClient.classify).toHaveBeenCalledTimes(1);
+  });
+
   it('classifies sample intents with rule-based logic', () => {
     const llmClient = {
       classify: vi.fn(),

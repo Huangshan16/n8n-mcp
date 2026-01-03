@@ -1101,6 +1101,7 @@ npm run dev:http       # HTTP dev mode
 - [Claude Desktop Setup](./docs/README_CLAUDE_SETUP.md) - Detailed Claude configuration
 - [Docker Guide](./docs/DOCKER_README.md) - Advanced Docker deployment options
 - [MCP Quick Start](./docs/MCP_QUICK_START_GUIDE.md) - Get started quickly with n8n-MCP
+- [Agent Backend Quick Start](./docs/refactor/AGENT_QUICKSTART.md) - Experimental agent backend + UI setup
 
 ### Feature Documentation
 - [Workflow Diff Operations](./docs/workflow-diff-examples.md) - Token-efficient workflow updates (NEW!)
@@ -1113,6 +1114,7 @@ npm run dev:http       # HTTP dev mode
 - [HTTP Deployment](./docs/HTTP_DEPLOYMENT.md) - Remote server setup guide
 - [Dependency Management](./docs/DEPENDENCY_UPDATES.md) - Keeping n8n packages in sync
 - [Claude's Interview](./docs/CLAUDE_INTERVIEW.md) - Real-world impact of n8n-MCP
+- [Agent Deployment (Draft)](./docs/refactor/AGENT_DEPLOYMENT.md) - Docker-based agent backend & UI notes
 
 ### Project Information
 - [Change Log](./CHANGELOG.md) - Complete version history

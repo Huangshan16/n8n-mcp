@@ -1,9 +1,11 @@
+import { SimpleCache } from '../utils/simple-cache';
 import { LLMClient } from './llm-client';
 import { Intent, IntentCategory, Entity } from './types';
 import { INTENT_CLASSIFICATION_PROMPT } from './prompts';
 
 interface IntentClassifierOptions {
   fallbackOnError?: boolean;
+  cacheTtlSeconds?: number;
 }
 
 const GREETING_PATTERNS = ['你好', '嗨', '哈喽', 'hello', 'hi'];
@@ -16,20 +18,34 @@ const EMOTION_PATTERNS = ['难过', '开心', '高兴', '共情', '伤心', '生
 
 export class IntentClassifier {
   private fallbackOnError: boolean;
+  private cache: SimpleCache;
+  private cacheTtlSeconds: number;
 
   constructor(private llmClient: LLMClient, options: IntentClassifierOptions = {}) {
     this.fallbackOnError = options.fallbackOnError ?? true;
+    this.cache = new SimpleCache();
+    this.cacheTtlSeconds = options.cacheTtlSeconds ?? 600;
   }
 
   async classify(userMessage: string): Promise<Intent> {
+    const cacheKey = `intent:${userMessage}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as Intent;
+    }
+
     try {
-      return await this.llmClient.classify(INTENT_CLASSIFICATION_PROMPT, userMessage);
+      const intent = await this.llmClient.classify(INTENT_CLASSIFICATION_PROMPT, userMessage);
+      this.cache.set(cacheKey, intent, this.cacheTtlSeconds);
+      return intent;
     } catch (error) {
       if (!this.fallbackOnError) {
         throw error;
       }
 
-      return this.classifyWithRules(userMessage);
+      const intent = this.classifyWithRules(userMessage);
+      this.cache.set(cacheKey, intent, this.cacheTtlSeconds);
+      return intent;
     }
   }
 
