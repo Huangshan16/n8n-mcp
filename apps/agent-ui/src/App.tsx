@@ -2,21 +2,12 @@ import { Suspense, lazy, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { ChatInterface } from './components/ChatInterface';
 import { Header } from './components/Header';
-const HardwareTwinPlaceholder = lazy(() =>
-  import('./components/HardwareTwinPlaceholder').then((module) => ({
-    default: module.HardwareTwinPlaceholder,
-  }))
-);
+import { useAgentChat } from './hooks/useAgentChat';
+import type { WorkflowCommand } from './lib/commandParser';
+
 const N8nIframe = lazy(() =>
   import('./components/N8nIframe').then((module) => ({ default: module.N8nIframe }))
 );
-const SystemLogPlaceholder = lazy(() =>
-  import('./components/SystemLogPlaceholder').then((module) => ({
-    default: module.SystemLogPlaceholder,
-  }))
-);
-import { useAgentChat } from './hooks/useAgentChat';
-import type { WorkflowCommand } from './lib/commandParser';
 
 function App() {
   const { messages, status, isBusy, sendMessage, createWorkflow } = useAgentChat();

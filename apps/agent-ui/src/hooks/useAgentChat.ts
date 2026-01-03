@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseCommandText } from '../lib/commandParser';
 import type { WorkflowCommand } from '../lib/commandParser';
 import { createWorkflow as createWorkflowApi, sendAgentMessage } from '../lib/agentApi';
+import type { WorkflowCreateResult } from '../lib/agentApi';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -132,9 +133,10 @@ export function useAgentChat() {
     [appendMessage, handleAgentResponse, sessionId]
   );
 
-  const createWorkflow = useCallback(async (command: WorkflowCommand) => {
-    return createWorkflowApi(command);
-  }, []);
+  const createWorkflow = useCallback(
+    async (command: WorkflowCommand): Promise<WorkflowCreateResult> => createWorkflowApi(command),
+    []
+  );
 
   return {
     messages,

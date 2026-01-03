@@ -12,6 +12,12 @@ export interface AgentChatResponse {
   };
 }
 
+export interface WorkflowCreateResult {
+  workflowId: string;
+  workflowName?: string;
+  workflowUrl?: string;
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -31,8 +37,8 @@ export async function sendAgentMessage(message: string, sessionId?: string): Pro
   return postJson<AgentChatResponse>('/api/agent/chat', { message, sessionId });
 }
 
-export async function createWorkflow(command: WorkflowCommand) {
-  return postJson('/api/workflow/create', {
+export async function createWorkflow(command: WorkflowCommand): Promise<WorkflowCreateResult> {
+  return postJson<WorkflowCreateResult>('/api/workflow/create', {
     scenarioId: command.scenarioId,
     params: command.params,
   });
