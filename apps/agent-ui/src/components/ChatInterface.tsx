@@ -1,0 +1,121 @@
+import { useEffect, useRef, useState } from 'react';
+import type { ChatMessage, ConnectionStatus } from '../hooks/useAgentChat';
+import type { WorkflowCommand } from '../lib/commandParser';
+
+const QUICK_PROMPTS = [
+  '见到老刘竖个中指骂人',
+  '我想做一个和我共情的机器人',
+  '我想有一个和我玩石头剪刀布的机器人',
+];
+
+interface ChatInterfaceProps {
+  messages: ChatMessage[];
+  onSend: (message: string) => void;
+  onCreateWorkflow: (command: WorkflowCommand) => Promise<unknown>;
+  status: ConnectionStatus;
+  isBusy: boolean;
+}
+
+export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBusy }: ChatInterfaceProps) {
+  const [input, setInput] = useState('');
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!listRef.current) {
+      return;
+    }
+    listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages]);
+
+  const handleSubmit = () => {
+    if (!input.trim()) {
+      return;
+    }
+    onSend(input.trim());
+    setInput('');
+  };
+
+  return (
+    <section className="glass-panel relative flex h-full flex-col overflow-hidden rounded-3xl">
+      <div className="neural-grid" />
+      <div className="relative z-10 flex items-center justify-between border-b border-cyan-500/10 px-6 py-4">
+        <div>
+          <p className="orbitron text-[11px] uppercase tracking-[0.35em] text-cyan-400/70">Neural Intake</p>
+          <p className="text-xs text-cyan-100/70">对话式需求收敛与指令生成</p>
+        </div>
+        <span className="mono text-[10px] uppercase text-cyan-400/60">{status.toUpperCase()}</span>
+      </div>
+
+      <div ref={listRef} className="scrollbar-none relative z-10 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        {messages.length === 0 ? (
+          <div className="space-y-4 text-sm text-cyan-100/70">
+            <p className="mono text-xs uppercase tracking-[0.3em] text-cyan-400/60">Waiting for input</p>
+            <p>描述你想要的机器人互动场景，Agent 会生成可执行的工作流按钮。</p>
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`fade-up flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl border px-4 py-3 text-sm shadow-[0_0_20px_rgba(0,242,255,0.05)] ${
+                  message.role === 'user'
+                    ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-50'
+                    : 'border-cyan-500/10 bg-black/40 text-cyan-100'
+                }`}
+              >
+                <p>{message.text}</p>
+                {message.command ? (
+                  <button
+                    type="button"
+                    onClick={() => onCreateWorkflow(message.command!)}
+                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 hover:text-cyan-50"
+                  >
+                    {message.command.displayText}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="relative z-10 border-t border-cyan-500/10 px-6 py-4">
+        <div className="flex flex-wrap gap-2 pb-3">
+          {QUICK_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => setInput(prompt)}
+              className="mono rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[10px] uppercase text-cyan-200/80 transition hover:border-cyan-200/60"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                handleSubmit();
+              }
+            }}
+            placeholder="描述你的机器人场景..."
+            className="flex-1 rounded-xl border border-cyan-500/20 bg-black/40 px-4 py-3 text-sm text-cyan-50 placeholder:text-cyan-200/40 focus:border-cyan-300/60 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isBusy}
+            className="orbitron rounded-xl border border-cyan-400/40 bg-cyan-500/20 px-5 py-3 text-xs uppercase tracking-[0.3em] text-cyan-50 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isBusy ? '...' : '发送'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
