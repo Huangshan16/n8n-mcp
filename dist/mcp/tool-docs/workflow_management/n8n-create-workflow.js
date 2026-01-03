@@ -21,7 +21,7 @@ exports.n8nCreateWorkflowDoc = {
         parameters: {
             name: { type: 'string', required: true, description: 'Workflow name' },
             nodes: { type: 'array', required: true, description: 'Array of nodes with id, name, type, typeVersion, position, parameters' },
-            connections: { type: 'object', required: true, description: 'Node connections. Keys are source node IDs' },
+            connections: { type: 'object', required: true, description: 'Node connections. Keys are source node names (not IDs)' },
             settings: { type: 'object', description: 'Optional workflow settings (timezone, error handling, etc.)' }
         },
         returns: 'Minimal summary (id, name, active, nodeCount) for token efficiency. Use n8n_get_workflow with mode "structure" to verify current state if needed.',
@@ -56,8 +56,8 @@ n8n_create_workflow({
     }
   ],
   connections: {
-    "webhook_1": {
-      "main": [[{node: "slack_1", type: "main", index: 0}]]
+    "Webhook": {
+      "main": [[{node: "Slack", type: "main", index: 0}]]
     }
   }
 })`,

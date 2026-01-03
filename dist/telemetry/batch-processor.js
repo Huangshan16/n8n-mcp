@@ -4,19 +4,13 @@ exports.TelemetryBatchProcessor = void 0;
 const telemetry_types_1 = require("./telemetry-types");
 const telemetry_error_1 = require("./telemetry-error");
 const logger_1 = require("../utils/logger");
-function toSnakeCase(obj) {
-    if (obj === null || obj === undefined)
-        return obj;
-    if (Array.isArray(obj))
-        return obj.map(toSnakeCase);
-    if (typeof obj !== 'object')
-        return obj;
+function keyToSnakeCase(key) {
+    return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+function mutationToSupabaseFormat(mutation) {
     const result = {};
-    for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
-            const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-            result[snakeKey] = toSnakeCase(obj[key]);
-        }
+    for (const [key, value] of Object.entries(mutation)) {
+        result[keyToSnakeCase(key)] = value;
     }
     return result;
 }
@@ -185,7 +179,7 @@ class TelemetryBatchProcessor {
             const batches = this.createBatches(mutations, telemetry_types_1.TELEMETRY_CONFIG.MAX_BATCH_SIZE);
             for (const batch of batches) {
                 const result = await this.executeWithRetry(async () => {
-                    const snakeCaseBatch = batch.map(mutation => toSnakeCase(mutation));
+                    const snakeCaseBatch = batch.map(mutation => mutationToSupabaseFormat(mutation));
                     const { error } = await this.supabase
                         .from('workflow_mutations')
                         .insert(snakeCaseBatch);
