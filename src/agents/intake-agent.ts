@@ -3,22 +3,22 @@ import { CommandGenerator } from './command-generator';
 import { IntentClassifier } from './intent-classifier';
 import { LLMClient } from './llm-client';
 import { ScenarioMatcher } from './scenario-matcher';
-import { AgentResponse, ConversationTurn, Scenario } from './types';
+import { SessionService } from './session-service';
+import { AgentResponse, Scenario } from './types';
 import { GUIDANCE_QUESTION_PROMPT } from './prompts';
 
 export class IntakeAgent {
-  private sessions = new Map<string, ConversationTurn[]>();
-
   constructor(
     private config: AgentConfig,
     private llmClient: LLMClient,
     private intentClassifier: IntentClassifier,
     private scenarioMatcher: ScenarioMatcher,
-    private commandGenerator: CommandGenerator
+    private commandGenerator: CommandGenerator,
+    private sessionService: SessionService
   ) {}
 
   async processUserInput(userMessage: string, sessionId: string): Promise<AgentResponse> {
-    this.recordTurn(sessionId, 'user', userMessage);
+    this.sessionService.appendTurn(sessionId, 'user', userMessage);
 
     const intent = await this.intentClassifier.classify(userMessage);
     const matchedScenarios = await this.scenarioMatcher.match(intent);
@@ -35,7 +35,7 @@ export class IntakeAgent {
         commandText,
       };
 
-      this.recordTurn(sessionId, 'assistant', response.message);
+      this.sessionService.appendTurn(sessionId, 'assistant', response.message);
       return response;
     }
 
@@ -45,7 +45,7 @@ export class IntakeAgent {
       message: question,
     };
 
-    this.recordTurn(sessionId, 'assistant', response.message);
+    this.sessionService.appendTurn(sessionId, 'assistant', response.message);
     return response;
   }
 
@@ -93,15 +93,5 @@ export class IntakeAgent {
     return `还需要补充一下${target.description || target.name}吗？`;
   }
 
-  private recordTurn(sessionId: string, role: ConversationTurn['role'], content: string): void {
-    const history = this.sessions.get(sessionId) || [];
-    history.push({ role, content });
-    const maxTurns = this.config.maxConversationTurns;
-
-    if (history.length > maxTurns * 2) {
-      history.splice(0, history.length - maxTurns * 2);
-    }
-
-    this.sessions.set(sessionId, history);
-  }
+  // Session state is maintained by SessionService.
 }

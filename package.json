@@ -56,6 +56,8 @@
     "agent:cleanup:nodes": "node dist/scripts/cleanup-nodes.js",
     "agent:cleanup:templates": "node dist/scripts/cleanup-templates.js",
     "test:llm-intent": "node dist/scripts/test-llm-intent.js",
+    "agent:start": "npm run build && node dist/agent-server/index.js",
+    "agent:dev": "ts-node src/agent-server/index.ts",
     "test:protocol-negotiation": "npx tsx src/scripts/test-protocol-negotiation.ts",
     "test:workflow-validation": "node dist/scripts/test-workflow-validation.js",
     "test:template-validation": "node dist/scripts/test-template-validation.js",

@@ -4,6 +4,7 @@ import { CommandGenerator } from '../../../src/agents/command-generator';
 import { AgentConfig } from '../../../src/agents/agent-config';
 import { DEFAULT_SCENARIOS } from '../../../src/agents/scenario-seeds';
 import { Intent } from '../../../src/agents/types';
+import { SessionService } from '../../../src/agents/session-service';
 
 const config: AgentConfig = {
   llmProvider: 'openai',
@@ -48,7 +49,8 @@ describe('IntakeAgent', () => {
       llmClient,
       intentClassifier as any,
       scenarioMatcher as any,
-      new CommandGenerator()
+      new CommandGenerator(),
+      new SessionService({ maxTurns: config.maxConversationTurns })
     );
 
     const response = await agent.processUserInput('测试', 'session-1');
@@ -92,7 +94,8 @@ describe('IntakeAgent', () => {
       llmClient,
       intentClassifier as any,
       scenarioMatcher as any,
-      new CommandGenerator()
+      new CommandGenerator(),
+      new SessionService({ maxTurns: config.maxConversationTurns })
     );
 
     const response = await agent.processUserInput('测试', 'session-2');

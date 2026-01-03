@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import http from 'http';
 import WebSocket from 'ws';
 import { attachWebSocketServer } from '../../../src/agent-server/websocket';
@@ -10,10 +10,23 @@ function waitForOpen(ws: WebSocket): Promise<void> {
   });
 }
 
+function waitForMessage(ws: WebSocket): Promise<string> {
+  return new Promise((resolve) => {
+    ws.on('message', (data) => resolve(data.toString()));
+  });
+}
+
 describe('Agent WebSocket server', () => {
-  it('accepts websocket connections', async () => {
+  it('accepts websocket connections and returns responses', async () => {
     const server = http.createServer();
-    const wss = attachWebSocketServer(server);
+    const agentService = {
+      chat: vi.fn().mockResolvedValue({
+        sessionId: 'session-1',
+        response: { type: 'guidance', message: 'hello' },
+      }),
+    };
+
+    attachWebSocketServer(server, agentService as any);
 
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => resolve());
@@ -27,10 +40,14 @@ describe('Agent WebSocket server', () => {
     const ws = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
     await waitForOpen(ws);
 
-    ws.close();
-    wss.close();
-    await new Promise((resolve) => server.close(resolve));
+    ws.send(JSON.stringify({ type: 'user_message', message: 'hi' }));
+    const message = await waitForMessage(ws);
 
-    expect(ws.readyState).toBe(WebSocket.CLOSING);
+    const parsed = JSON.parse(message);
+    expect(parsed.type).toBe('agent_response');
+    expect(parsed.response.message).toBe('hello');
+
+    ws.close();
+    await new Promise((resolve) => server.close(resolve));
   });
 });

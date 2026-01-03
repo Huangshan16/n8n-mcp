@@ -1,0 +1,88 @@
+import { randomUUID } from 'crypto';
+import { AgentSession, ConversationTurn } from './types';
+
+export interface SessionServiceOptions {
+  ttlMs?: number;
+  maxTurns?: number;
+}
+
+export class SessionService {
+  private sessions = new Map<string, AgentSession>();
+  private ttlMs: number;
+  private maxTurns: number;
+
+  constructor(options: SessionServiceOptions = {}) {
+    this.ttlMs = options.ttlMs ?? 30 * 60 * 1000;
+    this.maxTurns = options.maxTurns ?? 6;
+  }
+
+  getOrCreate(sessionId?: string): AgentSession {
+    if (sessionId) {
+      const existing = this.sessions.get(sessionId);
+      if (existing) {
+        this.refresh(existing);
+        return existing;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const id = sessionId || randomUUID();
+    const session: AgentSession = {
+      id,
+      history: [],
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: this.getExpiryIso(),
+    };
+    this.sessions.set(id, session);
+    return session;
+  }
+
+  appendTurn(sessionId: string, role: ConversationTurn['role'], content: string): AgentSession {
+    const session = this.getOrCreate(sessionId);
+    session.history.push({ role, content });
+
+    if (session.history.length > this.maxTurns * 2) {
+      session.history.splice(0, session.history.length - this.maxTurns * 2);
+    }
+
+    this.refresh(session);
+    return session;
+  }
+
+  getSession(sessionId: string): AgentSession | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    if (this.isExpired(session)) {
+      this.sessions.delete(sessionId);
+      return null;
+    }
+
+    return session;
+  }
+
+  pruneExpired(): void {
+    this.sessions.forEach((session, id) => {
+      if (this.isExpired(session)) {
+        this.sessions.delete(id);
+      }
+    });
+  }
+
+  private refresh(session: AgentSession): void {
+    const now = new Date().toISOString();
+    session.updatedAt = now;
+    session.expiresAt = this.getExpiryIso();
+  }
+
+  private getExpiryIso(): string {
+    return new Date(Date.now() + this.ttlMs).toISOString();
+  }
+
+  private isExpired(session: AgentSession): boolean {
+    return session.expiresAt ? new Date(session.expiresAt).getTime() <= Date.now() : false;
+  }
+}
