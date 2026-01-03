@@ -261,7 +261,7 @@ export class MCPClient {
     return nodes
       .filter((node) => {
         const type = node?.type as string | undefined;
-        return Boolean(type) && !this.allowedNodeTypes?.has(type);
+        return typeof type === 'string' && !this.allowedNodeTypes?.has(type);
       })
       .map((node) => ({
         type: 'error',
