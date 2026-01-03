@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseCommandText, WorkflowCommand } from '../lib/commandParser';
+import { parseCommandText } from '../lib/commandParser';
+import type { WorkflowCommand } from '../lib/commandParser';
 import { createWorkflow as createWorkflowApi, sendAgentMessage } from '../lib/agentApi';
 
 export type ChatRole = 'user' | 'assistant';

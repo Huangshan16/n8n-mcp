@@ -1,7 +1,7 @@
 import path from 'path';
-import { createDatabaseAdapter } from '../src/database/database-adapter';
-import { ensureAgentTables, seedAgentData } from '../src/agents/agent-db';
-import { logger } from '../src/utils/logger';
+import { createDatabaseAdapter } from '../database/database-adapter';
+import { ensureAgentTables, seedAgentData } from '../agents/agent-db';
+import { logger } from '../utils/logger';
 
 async function run() {
   const dbPath = process.env.NODE_DB_PATH || path.join(process.cwd(), 'data', 'nodes.db');
