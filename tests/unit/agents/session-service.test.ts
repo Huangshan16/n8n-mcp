@@ -14,6 +14,39 @@ describe('SessionService', () => {
     expect(service.getWorkflow(session.id)).toBeNull();
   });
 
+  it('stores and retrieves blueprint in session', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+    const blueprint = {
+      intentSummary: 'demo',
+      triggers: [],
+      logic: [],
+      executors: [],
+      missingFields: ['gesture'],
+    };
+
+    service.setBlueprint(session.id, blueprint);
+    expect(service.getBlueprint(session.id)).toEqual(blueprint);
+    service.clearBlueprint(session.id);
+    expect(service.getBlueprint(session.id)).toBeNull();
+  });
+
+  it('tracks user turn cadence for summaries', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+
+    service.appendTurn(session.id, 'user', 'one');
+    service.appendTurn(session.id, 'assistant', 'a');
+    service.appendTurn(session.id, 'user', 'two');
+    service.appendTurn(session.id, 'assistant', 'b');
+    service.appendTurn(session.id, 'user', 'three');
+
+    expect(service.getUserTurnCount(session.id)).toBe(3);
+    expect(service.shouldSummarize(session.id, 3)).toBe(true);
+    service.markSummary(session.id);
+    expect(service.shouldSummarize(session.id, 3)).toBe(false);
+  });
+
   it('appends history and keeps max turns', () => {
     const service = new SessionService({ maxTurns: 1 });
     const session = service.getOrCreate();

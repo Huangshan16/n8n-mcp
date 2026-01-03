@@ -31,6 +31,8 @@ export class SessionService {
     const session: AgentSession = {
       id,
       history: [],
+      userTurns: 0,
+      lastSummaryTurn: 0,
       createdAt: now,
       updatedAt: now,
       expiresAt: this.getExpiryIso(),
@@ -43,6 +45,9 @@ export class SessionService {
   appendTurn(sessionId: string, role: ConversationTurn['role'], content: string): AgentSession {
     const session = this.getOrCreate(sessionId);
     session.history.push({ role, content });
+    if (role === 'user') {
+      session.userTurns += 1;
+    }
 
     if (session.history.length > this.maxTurns * 2) {
       session.history.splice(0, session.history.length - this.maxTurns * 2);
@@ -60,6 +65,24 @@ export class SessionService {
   getHistory(sessionId: string): ConversationTurn[] {
     const session = this.getSession(sessionId);
     return session ? [...session.history] : [];
+  }
+
+  getUserTurnCount(sessionId: string): number {
+    return this.getSession(sessionId)?.userTurns ?? 0;
+  }
+
+  markSummary(sessionId: string): void {
+    const session = this.getOrCreate(sessionId);
+    session.lastSummaryTurn = session.userTurns;
+    this.refresh(session);
+  }
+
+  shouldSummarize(sessionId: string, cadence: number): boolean {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return false;
+    }
+    return session.userTurns > 0 && session.userTurns % cadence === 0 && session.lastSummaryTurn !== session.userTurns;
   }
 
   setWorkflow(sessionId: string, workflow: AgentSession['workflow']): void {
@@ -82,6 +105,28 @@ export class SessionService {
     session.workflow = undefined;
     this.refresh(session);
     logger.debug('SessionService: cleared workflow', { sessionId });
+  }
+
+  setBlueprint(sessionId: string, blueprint: AgentSession['blueprint']): void {
+    const session = this.getOrCreate(sessionId);
+    session.blueprint = blueprint;
+    this.refresh(session);
+    logger.debug('SessionService: stored blueprint', { sessionId });
+  }
+
+  getBlueprint(sessionId: string): AgentSession['blueprint'] | null {
+    const session = this.getSession(sessionId);
+    return session?.blueprint ?? null;
+  }
+
+  clearBlueprint(sessionId: string): void {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return;
+    }
+    session.blueprint = undefined;
+    this.refresh(session);
+    logger.debug('SessionService: cleared blueprint', { sessionId });
   }
 
   getSession(sessionId: string): AgentSession | null {
