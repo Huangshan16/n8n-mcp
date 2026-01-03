@@ -1,0 +1,22 @@
+[
+  {"text": "见到老刘竖个中指骂人", "category": "robot_task", "subCategory": "face_recognition_action"},
+  {"text": "见到老付比个V打招呼", "category": "robot_task", "subCategory": "face_recognition_action"},
+  {"text": "我想做一个和我共情的机器人", "category": "robot_task", "subCategory": "emotion_interaction"},
+  {"text": "做个情感交互的机器人", "category": "robot_task", "subCategory": "emotion_interaction"},
+  {"text": "我想有一个和我玩石头剪刀布的机器人", "category": "robot_task", "subCategory": "game_interaction"},
+  {"text": "来一局石头剪刀布", "category": "robot_task", "subCategory": "game_interaction"},
+  {"text": "帮我做个语音交互的流程", "category": "robot_task", "subCategory": "voice_interaction"},
+  {"text": "需要一个手势识别的互动", "category": "robot_task", "subCategory": "gesture_recognition"},
+  {"text": "机器人能自主导航吗", "category": "robot_task", "subCategory": "autonomous_navigation"},
+  {"text": "你好呀", "category": "greeting"},
+  {"text": "Hi there", "category": "greeting"},
+  {"text": "能用摄像头做什么", "category": "hardware_query"},
+  {"text": "麦克风支持哪些功能", "category": "hardware_query"},
+  {"text": "机械臂可以做哪些动作", "category": "hardware_query"},
+  {"text": "帮我修改已有工作流", "category": "workflow_edit"},
+  {"text": "我想更新这个流程", "category": "workflow_edit"},
+  {"text": "看到小明就挥手", "category": "robot_task", "subCategory": "face_recognition_action"},
+  {"text": "识别到朋友就说你好", "category": "robot_task", "subCategory": "face_recognition_action"},
+  {"text": "我要做一个机器人", "category": "robot_task"},
+  {"text": "帮我设计一个机器人动作", "category": "robot_task"}
+]
