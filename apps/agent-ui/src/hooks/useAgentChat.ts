@@ -97,7 +97,18 @@ export function useAgentChat() {
       if (reconnectTimer.current) {
         window.clearTimeout(reconnectTimer.current);
       }
-      wsRef.current?.close();
+      const socket = wsRef.current;
+      if (socket) {
+        if (socket.readyState === WebSocket.CONNECTING) {
+          const handleOpen = () => {
+            socket.removeEventListener('open', handleOpen);
+            socket.close();
+          };
+          socket.addEventListener('open', handleOpen);
+        } else {
+          socket.close();
+        }
+      }
       wsRef.current = null;
     };
   }, [connectWebSocket]);
