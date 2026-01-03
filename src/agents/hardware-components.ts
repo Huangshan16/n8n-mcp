@@ -30,12 +30,9 @@ export const HARDWARE_COMPONENTS: HardwareComponent[] = [
     },
     capabilities: [
       'face_recognition',
-      'object_detection',
-      'gesture_recognition',
-      'qr_code_scan',
+      'gesture_recognition'
     ],
     apiEndpoints: {
-      scan: { url: 'http://hardware-api/camera/scan', method: 'POST' },
       recognize_face: { url: 'http://hardware-api/camera/face/recognize', method: 'POST' },
       detect_gesture: { url: 'http://hardware-api/camera/gesture/detect', method: 'POST' },
     },
@@ -73,7 +70,7 @@ export const HARDWARE_COMPONENTS: HardwareComponent[] = [
       sendBody: true,
       contentType: 'json',
     },
-    capabilities: ['text_to_speech', 'play_audio', 'volume_control'],
+    capabilities: ['text_to_speech'],
     apiEndpoints: {
       tts: {
         url: 'http://hardware-api/speaker/tts',
@@ -88,9 +85,8 @@ export const HARDWARE_COMPONENTS: HardwareComponent[] = [
     displayName: '麦克风',
     nodeType: 'n8n-nodes-base.httpRequest',
     defaultConfig: { method: 'POST' },
-    capabilities: ['voice_recording', 'speech_to_text', 'noise_cancellation'],
+    capabilities: ['speech_to_text'],
     apiEndpoints: {
-      record: { url: 'http://hardware-api/microphone/record', method: 'POST' },
       stt: { url: 'http://hardware-api/microphone/stt', method: 'POST' },
     },
   },
@@ -104,12 +100,12 @@ export const HARDWARE_COMPONENTS: HardwareComponent[] = [
       sendBody: true,
       contentType: 'json',
     },
-    capabilities: ['emoji_display', 'text_display', 'image_display'],
+    capabilities: ['emoji_display'],
     apiEndpoints: {
       display: {
         url: 'http://hardware-api/screen/display',
         method: 'POST',
-        parameters: { content: 'string', type: 'emoji|text|image' },
+        parameters: { content: 'string', type: 'emoji' },
       },
     },
   },
@@ -119,7 +115,7 @@ export const HARDWARE_COMPONENTS: HardwareComponent[] = [
     displayName: '底盘(全向轮)',
     nodeType: 'n8n-nodes-base.httpRequest',
     defaultConfig: { method: 'POST' },
-    capabilities: ['omnidirectional_movement', 'rotation', 'speed_control'],
+    capabilities: ['omnidirectional_movement', 'rotation'],
     apiEndpoints: {
       move: { url: 'http://hardware-api/chassis/move', method: 'POST' },
     },
