@@ -4,6 +4,7 @@ import { WorkflowAutoFixer } from '../services/workflow-auto-fixer';
 import { WorkflowDiffEngine } from '../services/workflow-diff-engine';
 import { WorkflowValidator, ValidationIssue } from '../services/workflow-validator';
 import { SimpleCache } from '../utils/simple-cache';
+import { logger } from '../utils/logger';
 import type { WorkflowDefinition } from './types';
 import { ALLOWED_NODE_TYPES } from './allowed-node-types';
 
@@ -194,6 +195,11 @@ export class MCPClient {
   async validateWorkflow(workflow: WorkflowDefinition): Promise<ValidationResult> {
     const disallowed = this.validateAllowedNodes(workflow);
     if (disallowed.length > 0) {
+      logger.warn('MCPClient: workflow contains disallowed nodes', {
+        workflowName: workflow.name,
+        errors: disallowed.map((error) => error.message),
+        summary: this.summarizeWorkflow(workflow),
+      });
       return {
         isValid: false,
         errors: disallowed,
@@ -209,6 +215,19 @@ export class MCPClient {
       validateExpressions: true,
       profile: 'runtime',
     });
+
+    if (!result.valid) {
+      logger.warn('MCPClient: workflow validation failed', {
+        workflowName: workflow.name,
+        errors: result.errors.map((error) => ({
+          message: error.message,
+          nodeName: error.nodeName,
+          nodeId: error.nodeId,
+          code: error.code,
+        })),
+        summary: this.summarizeWorkflow(workflow),
+      });
+    }
 
     return {
       isValid: result.valid,
@@ -282,6 +301,38 @@ export class MCPClient {
       validConnections: 0,
       invalidConnections: 0,
       expressionsValidated: 0,
+    };
+  }
+
+  private summarizeWorkflow(workflow: WorkflowDefinition) {
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    const nodeTypes = nodes.reduce<Record<string, number>>((acc, node) => {
+      const type = node?.type as string | undefined;
+      if (type) {
+        acc[type] = (acc[type] ?? 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    const ifNodes = nodes
+      .filter((node) => node?.type === 'n8n-nodes-base.if')
+      .map((node) => {
+        const params = (node?.parameters ?? {}) as Record<string, unknown>;
+        return {
+          id: node?.id as string | undefined,
+          name: node?.name as string | undefined,
+          hasCombinator: typeof params.combinator !== 'undefined',
+          hasConditions: typeof params.conditions !== 'undefined',
+          combinator: params.combinator,
+          conditions: params.conditions,
+          filters: params.filters,
+        };
+      });
+
+    return {
+      nodeCount: nodes.length,
+      nodeTypes,
+      ifNodes,
     };
   }
 
