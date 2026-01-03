@@ -10,6 +10,10 @@ export interface AgentConfig {
   llmBaseUrl?: string;
   maxConversationTurns: number;
   convergenceThreshold: number;
+  llmTimeoutMs: number;
+  workflowCacheTtlSeconds: number;
+  maxIterations: number;
+  promptVariant?: string;
 }
 
 const agentConfigSchema = z.object({
@@ -24,6 +28,10 @@ const agentConfigSchema = z.object({
   model: z.string().min(1).optional(),
   AGENT_MAX_TURNS: z.coerce.number().positive().default(6),
   AGENT_CONVERGENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
+  AGENT_LLM_TIMEOUT_MS: z.coerce.number().positive().default(30000),
+  AGENT_WORKFLOW_CACHE_TTL: z.coerce.number().positive().default(600),
+  AGENT_MAX_ITERATIONS: z.coerce.number().positive().default(5),
+  AGENT_PROMPT_VARIANT: z.string().optional(),
 });
 
 let envLoaded = false;
@@ -62,5 +70,9 @@ export function loadAgentConfig(): AgentConfig {
     llmBaseUrl,
     maxConversationTurns: parsed.AGENT_MAX_TURNS,
     convergenceThreshold: parsed.AGENT_CONVERGENCE_THRESHOLD,
+    llmTimeoutMs: parsed.AGENT_LLM_TIMEOUT_MS,
+    workflowCacheTtlSeconds: parsed.AGENT_WORKFLOW_CACHE_TTL,
+    maxIterations: parsed.AGENT_MAX_ITERATIONS,
+    promptVariant: parsed.AGENT_PROMPT_VARIANT,
   };
 }

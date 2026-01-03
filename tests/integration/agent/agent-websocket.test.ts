@@ -27,6 +27,10 @@ describe('Agent WebSocket integration', () => {
       llmApiKey: 'test-key',
       maxConversationTurns: 4,
       convergenceThreshold: 0.7,
+      llmTimeoutMs: 1000,
+      workflowCacheTtlSeconds: 300,
+      maxIterations: 2,
+      promptVariant: 'baseline',
     };
 
     const workflowArchitect = {

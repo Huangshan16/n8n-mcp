@@ -14,6 +14,17 @@
 
 ---
 
+## 已废弃组件 (V2)
+
+下列 V1 组件已移除或不再使用，改为动态工作流生成流程：
+
+- `src/agents/scenario-seeds.ts`
+- `src/agents/scenario-repository.ts`
+- `src/agents/scenario-matcher.ts`
+- `src/agents/command-generator.ts`
+- `src/agents/template-renderer.ts`
+- `scenarios` 数据表（agent-db）
+
 ## 目录
 
 1. [重构目标与愿景](#1-重构目标与愿景)

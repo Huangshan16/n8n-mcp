@@ -14,6 +14,10 @@ describe('Agent config', () => {
     process.env.AI_BASE_URL = 'https://example.com';
     process.env.AGENT_MAX_TURNS = '4';
     process.env.AGENT_CONVERGENCE_THRESHOLD = '0.9';
+    process.env.AGENT_LLM_TIMEOUT_MS = '12000';
+    process.env.AGENT_WORKFLOW_CACHE_TTL = '900';
+    process.env.AGENT_MAX_ITERATIONS = '4';
+    process.env.AGENT_PROMPT_VARIANT = 'strict';
 
     vi.resetModules();
     const { loadAgentConfig } = await import('../../../src/agents/agent-config');
@@ -24,6 +28,10 @@ describe('Agent config', () => {
     expect(config.llmBaseUrl).toBe('https://example.com');
     expect(config.maxConversationTurns).toBe(4);
     expect(config.convergenceThreshold).toBe(0.9);
+    expect(config.llmTimeoutMs).toBe(12000);
+    expect(config.workflowCacheTtlSeconds).toBe(900);
+    expect(config.maxIterations).toBe(4);
+    expect(config.promptVariant).toBe('strict');
   });
 
   it('falls back to generic variables', async () => {

@@ -1102,6 +1102,7 @@ npm run dev:http       # HTTP dev mode
 - [Docker Guide](./docs/DOCKER_README.md) - Advanced Docker deployment options
 - [MCP Quick Start](./docs/MCP_QUICK_START_GUIDE.md) - Get started quickly with n8n-MCP
 - [Agent Backend Quick Start](./docs/refactor/AGENT_QUICKSTART.md) - Experimental agent backend + UI setup
+- [Prompt Engineering Guide](./docs/refactor/PROMPT_ENGINEERING_GUIDE.md) - WorkflowArchitect prompt variants and tuning
 
 ### Feature Documentation
 - [Workflow Diff Operations](./docs/workflow-diff-examples.md) - Token-efficient workflow updates (NEW!)

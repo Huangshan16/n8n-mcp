@@ -29,6 +29,10 @@ export async function createAgentStack(options: AgentStackOptions = {}) {
     hasBaseUrl: Boolean(config.llmBaseUrl),
     maxTurns: config.maxConversationTurns,
     convergenceThreshold: config.convergenceThreshold,
+    maxIterations: config.maxIterations,
+    workflowCacheTtlSeconds: config.workflowCacheTtlSeconds,
+    llmTimeoutMs: config.llmTimeoutMs,
+    promptVariant: config.promptVariant ?? 'baseline',
   });
   const llmClient = options.llmClient ?? createLLMClient(config);
   const hardwareService = new HardwareService();
@@ -40,7 +44,13 @@ export async function createAgentStack(options: AgentStackOptions = {}) {
 
   const mcpClient = options.mcpClient ?? new MCPClient(nodeRepository!);
   const workflowArchitect =
-    options.workflowArchitect ?? new WorkflowArchitect(llmClient, mcpClient);
+    options.workflowArchitect ??
+    new WorkflowArchitect(llmClient, mcpClient, {
+      llmTimeoutMs: config.llmTimeoutMs,
+      cacheTtlSeconds: config.workflowCacheTtlSeconds,
+      maxIterations: config.maxIterations,
+      promptVariant: config.promptVariant,
+    });
   const sessionService = new SessionService({
     maxTurns: config.maxConversationTurns,
   });

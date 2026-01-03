@@ -3,6 +3,7 @@ import { LLMClient, ChatMessage } from './llm-client';
 import { HardwareComponent } from './hardware-components';
 import { WorkflowDefinition, ConversationTurn } from './types';
 import { buildArchitectSystemPrompt } from './prompts/architect-system';
+import { selectPromptVariant } from './prompts/prompt-variants';
 import { SimpleCache } from '../utils/simple-cache';
 import { logger } from '../utils/logger';
 
@@ -28,6 +29,7 @@ export interface WorkflowArchitectOptions {
   maxIterations?: number;
   llmTimeoutMs?: number;
   cacheTtlSeconds?: number;
+  promptVariant?: string;
 }
 
 const BASE_NODE_QUERIES = ['http request', 'webhook', 'if', 'code'];
@@ -44,6 +46,8 @@ export class WorkflowArchitect {
   private llmTimeoutMs: number;
   private cacheTtlSeconds: number;
   private cache: SimpleCache;
+  private nodeContextCache: SimpleCache;
+  private promptVariant?: string;
 
   constructor(
     private llmClient: LLMClient,
@@ -54,6 +58,8 @@ export class WorkflowArchitect {
     this.llmTimeoutMs = options.llmTimeoutMs ?? 30000;
     this.cacheTtlSeconds = options.cacheTtlSeconds ?? 600;
     this.cache = new SimpleCache();
+    this.nodeContextCache = new SimpleCache();
+    this.promptVariant = options.promptVariant;
   }
 
   async generateWorkflow(request: WorkflowRequest): Promise<WorkflowResult> {
@@ -70,7 +76,8 @@ export class WorkflowArchitect {
       'validate_workflow: 校验工作流JSON结构',
       'autofix_workflow: 尝试自动修复常见错误',
     ];
-    const systemPrompt = `${buildArchitectSystemPrompt(request.hardwareComponents, toolDescriptions)}\n\n# 节点上下文\n${nodeContext}`;
+    const variant = selectPromptVariant(this.promptVariant, request.userIntent);
+    const systemPrompt = `${buildArchitectSystemPrompt(request.hardwareComponents, toolDescriptions, variant)}\n\n# 节点上下文\n${nodeContext}`;
     const userMessage = this.buildUserMessage(request);
 
     let lastErrors: string[] = [];
@@ -174,6 +181,13 @@ export class WorkflowArchitect {
   }
 
   private async buildNodeContext(components: HardwareComponent[]): Promise<string> {
+    const key = components.map((component) => component.name).sort().join('|');
+    const cacheKey = `node-context:${key || 'all'}`;
+    const cached = this.nodeContextCache.get(cacheKey);
+    if (cached) {
+      return cached as string;
+    }
+
     const nodeTypes = new Set<string>(BASE_NODE_TYPES);
     components.forEach((component) => nodeTypes.add(component.nodeType));
 
@@ -191,7 +205,7 @@ export class WorkflowArchitect {
       })
     );
 
-    return details
+    const context = details
       .filter(Boolean)
       .map((node) =>
         JSON.stringify(
@@ -206,6 +220,9 @@ export class WorkflowArchitect {
         )
       )
       .join('\n');
+
+    this.nodeContextCache.set(cacheKey, context, this.cacheTtlSeconds);
+    return context;
   }
 
   private async callLLM(messages: ChatMessage[]): Promise<string> {

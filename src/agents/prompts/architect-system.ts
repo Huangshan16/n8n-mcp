@@ -1,6 +1,7 @@
 import { HardwareComponent } from '../hardware-components';
 import { FEW_SHOT_EXAMPLES } from './few-shot-examples';
 import { ERROR_PATTERNS } from './error-patterns';
+import type { PromptVariant } from './prompt-variants';
 
 function renderHardwareContext(components: HardwareComponent[]): string {
   return components
@@ -36,7 +37,8 @@ function renderErrorPatterns(): string {
 
 export function buildArchitectSystemPrompt(
   hardwareComponents: HardwareComponent[],
-  toolDescriptions: string[]
+  toolDescriptions: string[],
+  variant?: PromptVariant
 ): string {
   return `
 你是一个n8n工作流架构师，专门为硬件机器人设计自动化工作流。
@@ -63,5 +65,7 @@ ${renderExamples()}
 输出要求：
 - 先输出一段简短设计思路（以"Reasoning:"开头）
 - 再输出完整工作流JSON代码块
+
+${variant ? `\n# 变体要求 (${variant.label})\n${variant.extraInstructions}\n` : ''}
 `;
 }

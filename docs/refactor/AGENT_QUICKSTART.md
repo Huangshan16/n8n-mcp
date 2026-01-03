@@ -18,7 +18,6 @@ npm run agent:dev
 By default the server listens on `http://localhost:3005` and exposes:
 - `POST /api/agent/chat`
 - `POST /api/workflow/create`
-- `GET /api/scenarios`
 - WebSocket `ws://localhost:3005/ws`
 
 ## 3) Start the UI
@@ -52,3 +51,15 @@ model=gpt-5.1
 ```
 
 The agent server uses these values to call your LLM and create workflows in n8n.
+
+### Optional Agent Tuning
+
+```bash
+AGENT_LLM_TIMEOUT_MS=30000
+AGENT_WORKFLOW_CACHE_TTL=600
+AGENT_MAX_ITERATIONS=5
+AGENT_PROMPT_VARIANT=baseline   # baseline | strict | ab
+```
+
+The agent will return `workflow_ready` responses that include the workflow JSON,
+reasoning text, and metadata (iterations + node count).

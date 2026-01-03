@@ -13,6 +13,10 @@ docker run --rm -p 3005:3005 \
   -e base_url=https://your-llm-endpoint \
   -e api_key=your-llm-api-key \
   -e model=gpt-5.1 \
+  -e AGENT_LLM_TIMEOUT_MS=30000 \
+  -e AGENT_WORKFLOW_CACHE_TTL=600 \
+  -e AGENT_MAX_ITERATIONS=5 \
+  -e AGENT_PROMPT_VARIANT=baseline \
   node:22-bullseye \
   bash -lc "npm install && npm run build && npm run agent:start"
 ```
