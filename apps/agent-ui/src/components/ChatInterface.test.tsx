@@ -4,17 +4,17 @@ import { ChatInterface } from './ChatInterface';
 
 
 describe('ChatInterface', () => {
-  it('renders command button and triggers handler', () => {
+  it('renders workflow button and triggers handler', () => {
     const onCreateWorkflow = vi.fn().mockResolvedValue(null);
     const messages = [
       {
         id: '1',
         role: 'assistant' as const,
         text: '准备好了',
-        command: {
-          scenarioId: 'demo',
-          params: {},
-          displayText: '创建工作流',
+        workflow: {
+          name: 'Demo',
+          nodes: [],
+          connections: {},
         },
       },
     ];

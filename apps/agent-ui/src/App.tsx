@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import { ChatInterface } from './components/ChatInterface';
 import { Header } from './components/Header';
 import { useAgentChat } from './hooks/useAgentChat';
-import type { WorkflowCommand } from './lib/commandParser';
+import type { WorkflowDefinition } from './lib/agentApi';
 
 const N8nIframe = lazy(() =>
   import('./components/N8nIframe').then((module) => ({ default: module.N8nIframe }))
@@ -13,9 +13,9 @@ function App() {
   const { messages, status, isBusy, sendMessage, createWorkflow } = useAgentChat();
   const [refreshToken, setRefreshToken] = useState(0);
 
-  const handleCreateWorkflow = async (command: WorkflowCommand) => {
+  const handleCreateWorkflow = async (workflow: WorkflowDefinition) => {
     try {
-      const result = await createWorkflow(command);
+      const result = await createWorkflow(workflow);
       toast.success(`工作流已创建: ${result.workflowName || result.workflowId}`);
       setRefreshToken((prev) => prev + 1);
     } catch (error) {

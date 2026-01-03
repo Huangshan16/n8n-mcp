@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage, ConnectionStatus } from '../hooks/useAgentChat';
-import type { WorkflowCommand } from '../lib/commandParser';
+import type { WorkflowDefinition } from '../lib/agentApi';
 
 const QUICK_PROMPTS = [
   '见到老刘竖个中指骂人',
@@ -11,13 +11,14 @@ const QUICK_PROMPTS = [
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   onSend: (message: string) => void;
-  onCreateWorkflow: (command: WorkflowCommand) => Promise<unknown>;
+  onCreateWorkflow: (workflow: WorkflowDefinition) => Promise<unknown>;
   status: ConnectionStatus;
   isBusy: boolean;
 }
 
 export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBusy }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
+  const [expanded, setExpanded] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -62,18 +63,47 @@ export function ChatInterface({ messages, onSend, onCreateWorkflow, status, isBu
                 className={`max-w-[80%] rounded-2xl border px-4 py-3 text-sm shadow-[0_0_20px_rgba(0,242,255,0.05)] ${
                   message.role === 'user'
                     ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-50'
-                    : 'border-cyan-500/10 bg-black/40 text-cyan-100'
+                    : message.variant === 'error'
+                      ? 'border-rose-400/30 bg-rose-500/10 text-rose-100'
+                      : 'border-cyan-500/10 bg-black/40 text-cyan-100'
                 }`}
               >
                 <p>{message.text}</p>
-                {message.command ? (
-                  <button
-                    type="button"
-                    onClick={() => onCreateWorkflow(message.command!)}
-                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 hover:text-cyan-50"
-                  >
-                    {message.command.displayText}
-                  </button>
+                {message.reasoning ? (
+                  <p className="mt-2 text-xs text-cyan-200/70">设计思路: {message.reasoning}</p>
+                ) : null}
+                {message.metadata ? (
+                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase text-cyan-200/70">
+                    <span className="mono rounded-full border border-cyan-400/30 px-2 py-0.5">
+                      nodes {message.metadata.nodeCount}
+                    </span>
+                    <span className="mono rounded-full border border-cyan-400/30 px-2 py-0.5">
+                      iterations {message.metadata.iterations}
+                    </span>
+                  </div>
+                ) : null}
+                {message.workflow ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onCreateWorkflow(message.workflow!)}
+                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 hover:text-cyan-50"
+                    >
+                      创建工作流
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((prev) => (prev === message.id ? null : message.id))}
+                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-black/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-200/80 transition hover:border-cyan-200/60"
+                    >
+                      查看工作流详情
+                    </button>
+                  </div>
+                ) : null}
+                {message.workflow && expanded === message.id ? (
+                  <pre className="mt-3 max-h-48 overflow-auto rounded-xl border border-cyan-500/10 bg-black/50 p-3 text-[11px] text-cyan-100/80">
+                    {JSON.stringify(message.workflow, null, 2)}
+                  </pre>
                 ) : null}
               </div>
             </div>

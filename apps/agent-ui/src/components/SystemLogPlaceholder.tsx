@@ -1,7 +1,7 @@
 const LOG_LINES = [
   '[boot] agent kernel warmup',
   '[link] websocket handshake ready',
-  '[cache] scenario seeds loaded',
+  '[cache] workflow architect primed',
   '[watch] waiting for new intents',
 ];
 

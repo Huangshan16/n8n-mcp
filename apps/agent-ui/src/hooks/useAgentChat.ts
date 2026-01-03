@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseCommandText } from '../lib/commandParser';
-import type { WorkflowCommand } from '../lib/commandParser';
 import { createWorkflow as createWorkflowApi, sendAgentMessage } from '../lib/agentApi';
-import type { WorkflowCreateResult } from '../lib/agentApi';
+import type { WorkflowCreateResult, WorkflowDefinition, AgentResponse } from '../lib/agentApi';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -10,7 +8,13 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
-  command?: WorkflowCommand;
+  workflow?: WorkflowDefinition;
+  reasoning?: string;
+  metadata?: {
+    iterations: number;
+    nodeCount: number;
+  };
+  variant?: 'error' | 'normal';
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
@@ -35,17 +39,19 @@ export function useAgentChat() {
       setSessionId(payload.sessionId);
     }
 
-    const response = payload?.response;
+    const response = payload?.response as AgentResponse | undefined;
     if (!response?.message) {
       return;
     }
 
-    const command = response.command || parseCommandText(response.commandText || response.message);
     appendMessage({
       id: `agent-${Date.now()}`,
       role: 'assistant',
       text: response.message,
-      command: command || undefined,
+      workflow: response.workflow,
+      reasoning: response.reasoning,
+      metadata: response.metadata,
+      variant: response.type === 'error' ? 'error' : 'normal',
     });
   }, [appendMessage]);
 
@@ -145,8 +151,8 @@ export function useAgentChat() {
   );
 
   const createWorkflow = useCallback(
-    async (command: WorkflowCommand): Promise<WorkflowCreateResult> => createWorkflowApi(command),
-    []
+    async (workflow: WorkflowDefinition): Promise<WorkflowCreateResult> => createWorkflowApi(workflow, sessionId),
+    [sessionId]
   );
 
   return {

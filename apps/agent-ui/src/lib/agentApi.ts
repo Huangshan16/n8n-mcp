@@ -1,15 +1,28 @@
-import type { WorkflowCommand } from './commandParser';
-
 const API_URL = import.meta.env.VITE_AGENT_API_URL || 'http://localhost:3005';
+
+export interface WorkflowDefinition {
+  name: string;
+  nodes: Array<Record<string, unknown>>;
+  connections: Record<string, unknown>;
+  settings?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+}
+
+export interface AgentResponse {
+  type: 'guidance' | 'workflow_ready' | 'error';
+  message: string;
+  workflow?: WorkflowDefinition;
+  reasoning?: string;
+  metadata?: {
+    iterations: number;
+    nodeCount: number;
+  };
+  details?: unknown;
+}
 
 export interface AgentChatResponse {
   sessionId: string;
-  response: {
-    type: 'guidance' | 'command_ready';
-    message: string;
-    command?: WorkflowCommand;
-    commandText?: string;
-  };
+  response: AgentResponse;
 }
 
 export interface WorkflowCreateResult {
@@ -37,9 +50,12 @@ export async function sendAgentMessage(message: string, sessionId?: string): Pro
   return postJson<AgentChatResponse>('/api/agent/chat', { message, sessionId });
 }
 
-export async function createWorkflow(command: WorkflowCommand): Promise<WorkflowCreateResult> {
+export async function createWorkflow(
+  workflow: WorkflowDefinition,
+  sessionId?: string
+): Promise<WorkflowCreateResult> {
   return postJson<WorkflowCreateResult>('/api/workflow/create', {
-    scenarioId: command.scenarioId,
-    params: command.params,
+    workflow,
+    sessionId,
   });
 }
