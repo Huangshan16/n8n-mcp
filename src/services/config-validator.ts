@@ -5,7 +5,7 @@
  * Provides helpful suggestions and identifies missing or misconfigured properties.
  */
 
-import { shouldSkipLiteralValidation } from '../utils/expression-utils.js';
+import { shouldSkipLiteralValidation } from '../utils/expression-utils';
 
 export interface ValidationResult {
   valid: boolean;

@@ -82,7 +82,23 @@ export interface MCPClientOptions {
 export class MCPClient {
   private cache: SimpleCache;
   private cacheTtlSeconds: number;
-  private workflowValidator: MCPClientOptions['workflowValidator'];
+  private workflowValidator: {
+    validateWorkflow: (
+      workflow: WorkflowDefinition,
+      options?: {
+        validateNodes?: boolean;
+        validateConnections?: boolean;
+        validateExpressions?: boolean;
+        profile?: 'minimal' | 'runtime' | 'ai-friendly' | 'strict';
+      }
+    ) => Promise<{
+      valid: boolean;
+      errors: ValidationIssue[];
+      warnings: ValidationIssue[];
+      statistics: ValidationResult['statistics'];
+      suggestions: string[];
+    }>;
+  };
   private autoFixer: WorkflowAutoFixer;
   private diffEngine: WorkflowDiffEngine;
 
@@ -92,9 +108,15 @@ export class MCPClient {
   ) {
     this.cache = new SimpleCache();
     this.cacheTtlSeconds = options.cacheTtlSeconds ?? 600;
-    this.workflowValidator =
-      options.workflowValidator ??
-      new WorkflowValidator(this.nodeRepository, EnhancedConfigValidator);
+    if (options.workflowValidator) {
+      this.workflowValidator = options.workflowValidator;
+    } else {
+      const validator = new WorkflowValidator(this.nodeRepository, EnhancedConfigValidator);
+      this.workflowValidator = {
+        validateWorkflow: (workflow, options) =>
+          validator.validateWorkflow(workflow as any, options),
+      };
+    }
     this.autoFixer = options.autoFixer ?? new WorkflowAutoFixer(this.nodeRepository);
     this.diffEngine = options.diffEngine ?? new WorkflowDiffEngine();
   }
@@ -159,7 +181,7 @@ export class MCPClient {
   }
 
   async validateWorkflow(workflow: WorkflowDefinition): Promise<ValidationResult> {
-    const result = await this.workflowValidator!.validateWorkflow(workflow, {
+    const result = await this.workflowValidator.validateWorkflow(workflow, {
       validateNodes: true,
       validateConnections: true,
       validateExpressions: true,
@@ -192,6 +214,7 @@ export class MCPClient {
     }
 
     const result = await this.diffEngine.applyDiff(workflow as any, {
+      id: workflow.name || 'autofix',
       operations: fixes.operations,
       validateOnly: false,
     });
