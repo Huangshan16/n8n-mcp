@@ -20,6 +20,20 @@ export class AgentService {
     return { sessionId: session.id, response };
   }
 
+  async confirm(sessionId: string): Promise<{ sessionId: string; response: AgentResponse }> {
+    const session = this.sessionService.getSession(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+    logger.debug('AgentService: confirm request', { sessionId });
+    const response = await this.intakeAgent.confirmBlueprint(sessionId);
+    logger.debug('AgentService: confirm response', {
+      sessionId,
+      responseType: response.type,
+    });
+    return { sessionId: session.id, response };
+  }
+
   getSession(sessionId: string) {
     return this.sessionService.getSession(sessionId);
   }

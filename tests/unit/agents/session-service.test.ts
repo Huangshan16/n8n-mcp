@@ -14,6 +14,22 @@ describe('SessionService', () => {
     expect(service.getWorkflow(session.id)).toBeNull();
   });
 
+  it('stores and retrieves intent and confirmation state', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+    const intent = { category: 'custom', entities: {}, confidence: 0.8 };
+
+    service.setIntent(session.id, intent);
+    expect(service.getIntent(session.id)).toEqual(intent);
+    expect(service.isConfirmed(session.id)).toBe(false);
+
+    service.setConfirmed(session.id, true);
+    expect(service.isConfirmed(session.id)).toBe(true);
+
+    service.clearIntent(session.id);
+    expect(service.getIntent(session.id)).toBeNull();
+  });
+
   it('stores and retrieves blueprint in session', () => {
     const service = new SessionService();
     const session = service.getOrCreate();

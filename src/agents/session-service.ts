@@ -31,6 +31,7 @@ export class SessionService {
     const session: AgentSession = {
       id,
       history: [],
+      confirmed: false,
       userTurns: 0,
       lastSummaryTurn: 0,
       createdAt: now,
@@ -107,6 +108,28 @@ export class SessionService {
     logger.debug('SessionService: cleared workflow', { sessionId });
   }
 
+  setIntent(sessionId: string, intent: AgentSession['intent']): void {
+    const session = this.getOrCreate(sessionId);
+    session.intent = intent;
+    this.refresh(session);
+    logger.debug('SessionService: stored intent', { sessionId, category: intent?.category });
+  }
+
+  getIntent(sessionId: string): AgentSession['intent'] | null {
+    const session = this.getSession(sessionId);
+    return session?.intent ?? null;
+  }
+
+  clearIntent(sessionId: string): void {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return;
+    }
+    session.intent = undefined;
+    this.refresh(session);
+    logger.debug('SessionService: cleared intent', { sessionId });
+  }
+
   setBlueprint(sessionId: string, blueprint: AgentSession['blueprint']): void {
     const session = this.getOrCreate(sessionId);
     session.blueprint = blueprint;
@@ -127,6 +150,18 @@ export class SessionService {
     session.blueprint = undefined;
     this.refresh(session);
     logger.debug('SessionService: cleared blueprint', { sessionId });
+  }
+
+  setConfirmed(sessionId: string, confirmed: boolean): void {
+    const session = this.getOrCreate(sessionId);
+    session.confirmed = confirmed;
+    this.refresh(session);
+    logger.debug('SessionService: updated confirmation', { sessionId, confirmed });
+  }
+
+  isConfirmed(sessionId: string): boolean {
+    const session = this.getSession(sessionId);
+    return session?.confirmed ?? false;
   }
 
   getSession(sessionId: string): AgentSession | null {

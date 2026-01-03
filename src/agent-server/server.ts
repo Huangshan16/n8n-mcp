@@ -50,6 +50,23 @@ export class AgentHttpServer {
       }
     });
 
+    app.post('/api/agent/confirm', async (req, res) => {
+      const sessionId = req.body?.sessionId as string | undefined;
+      if (!sessionId) {
+        res.status(400).json({ error: 'sessionId is required' });
+        return;
+      }
+
+      try {
+        logger.debug('HTTP confirm request', { sessionId });
+        const result = await this.agentService.confirm(sessionId);
+        res.json(result);
+      } catch (error) {
+        logger.warn('HTTP confirm error', error);
+        res.status(500).json({ error: error instanceof Error ? error.message : 'Agent error' });
+      }
+    });
+
     app.post('/api/workflow/create', async (req, res) => {
       try {
         const workflow = req.body?.workflow as Record<string, unknown> | undefined;

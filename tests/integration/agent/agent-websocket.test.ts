@@ -5,7 +5,7 @@ import { createAgentStack } from '../../../src/agent-server/agent-factory';
 
 function waitForMessage(ws: WebSocket): Promise<string> {
   return new Promise((resolve) => {
-    ws.on('message', (data) => resolve(data.toString()));
+    ws.once('message', (data) => resolve(data.toString()));
   });
 }
 
@@ -72,8 +72,15 @@ describe('Agent WebSocket integration', () => {
       const payload = JSON.parse(response);
 
       expect(payload.type).toBe('agent_response');
-      expect(payload.response.type).toBe('workflow_ready');
-      expect(payload.response.message).toContain('工作流');
+      expect(payload.response.type).toBe('summary_ready');
+
+      ws.send(JSON.stringify({ type: 'confirm_workflow', sessionId: payload.sessionId }));
+      const confirmResponse = await waitForMessage(ws);
+      const confirmPayload = JSON.parse(confirmResponse);
+
+      expect(confirmPayload.type).toBe('agent_response');
+      expect(confirmPayload.response.type).toBe('workflow_ready');
+      expect(confirmPayload.response.message).toContain('工作流');
     } finally {
       ws.close();
       await server.stop();

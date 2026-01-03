@@ -15,4 +15,22 @@ describe('AgentService', () => {
     expect(result.sessionId).toBeDefined();
     expect(result.response.message).toBe('hi');
   });
+
+  it('confirms workflow using existing session', async () => {
+    const intakeAgent = {
+      confirmBlueprint: vi.fn().mockResolvedValue({
+        type: 'workflow_ready',
+        message: 'ok',
+        workflow: { name: 'WF', nodes: [], connections: {} },
+      }),
+    };
+    const sessionService = new SessionService();
+    const session = sessionService.getOrCreate();
+    const service = new AgentService(intakeAgent as any, sessionService);
+
+    const result = await service.confirm(session.id);
+
+    expect(result.sessionId).toBe(session.id);
+    expect(result.response.type).toBe('workflow_ready');
+  });
 });

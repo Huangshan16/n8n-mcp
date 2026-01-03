@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 
 export class IntakeAgent {
   private static readonly SUMMARY_CADENCE = 3;
+  private static readonly CONFIRM_MAX_ATTEMPTS = 3;
 
   constructor(
     private config: AgentConfig,
@@ -26,7 +27,10 @@ export class IntakeAgent {
 
     const intent = await this.extractIntent(userMessage, history);
     const blueprint = this.buildBlueprint(userMessage, intent);
+    this.sessionService.setIntent(sessionId, intent);
     this.sessionService.setBlueprint(sessionId, blueprint);
+    this.sessionService.setConfirmed(sessionId, false);
+    this.sessionService.clearWorkflow(sessionId);
 
     const missingInfo = blueprint.missingFields;
     logger.debug('IntakeAgent: intent summary', {
@@ -64,6 +68,72 @@ export class IntakeAgent {
     const response: AgentResponse = {
       type: 'guidance',
       message: question,
+    };
+    this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+    return response;
+  }
+
+  async confirmBlueprint(sessionId: string): Promise<AgentResponse> {
+    const session = this.sessionService.getSession(sessionId);
+    if (!session) {
+      return { type: 'error', message: 'Session not found. 请先发送需求。' };
+    }
+
+    const blueprint = session.blueprint;
+    const intent = session.intent;
+    if (!blueprint || !intent) {
+      return { type: 'guidance', message: '请先描述需求，我才能生成工作流。' };
+    }
+
+    if (blueprint.missingFields.length > 0) {
+      const question = await this.generateGuidanceQuestion(intent, blueprint.missingFields);
+      const response: AgentResponse = { type: 'guidance', message: question };
+      this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+      return response;
+    }
+
+    const hardwareComponents = this.resolveHardwareComponents(intent);
+    const userIntent = this.renderBlueprintSummary(blueprint);
+    const history = this.sessionService.getHistory(sessionId);
+    let lastError = '工作流校验失败';
+
+    for (let attempt = 1; attempt <= IntakeAgent.CONFIRM_MAX_ATTEMPTS; attempt += 1) {
+      logger.debug('IntakeAgent: generating workflow after confirm', { sessionId, attempt });
+      const result = await this.workflowArchitect.generateWorkflow(
+        {
+          userIntent,
+          entities: intent.entities,
+          hardwareComponents,
+          conversationHistory: history,
+        },
+        { maxIterations: 1 }
+      );
+
+      if (result.success && result.workflow) {
+        this.sessionService.setWorkflow(sessionId, result.workflow);
+        this.sessionService.setConfirmed(sessionId, true);
+        const response: AgentResponse = {
+          type: 'workflow_ready',
+          message: `工作流已生成，共${result.workflow.nodes.length}个节点，可继续创建。`,
+          workflow: result.workflow,
+          reasoning: result.reasoning,
+          metadata: {
+            iterations: result.iterations,
+            nodeCount: result.workflow.nodes.length,
+          },
+        };
+        this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+        return response;
+      }
+
+      if (result.validationResult?.errors?.length) {
+        lastError = result.validationResult.errors.map((error) => error.message).join('；');
+      }
+    }
+
+    const response: AgentResponse = {
+      type: 'guidance',
+      message: `工作流校验失败：${lastError}。请补充说明后再试。`,
     };
     this.sessionService.appendTurn(sessionId, 'assistant', response.message);
     return response;

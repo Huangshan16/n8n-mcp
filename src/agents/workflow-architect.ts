@@ -32,6 +32,10 @@ export interface WorkflowArchitectOptions {
   promptVariant?: string;
 }
 
+export interface WorkflowGenerationOptions {
+  maxIterations?: number;
+}
+
 const BASE_NODE_QUERIES = ['http request', 'webhook', 'if', 'code'];
 const BASE_NODE_TYPES = [
   'n8n-nodes-base.httpRequest',
@@ -62,7 +66,10 @@ export class WorkflowArchitect {
     this.promptVariant = options.promptVariant;
   }
 
-  async generateWorkflow(request: WorkflowRequest): Promise<WorkflowResult> {
+  async generateWorkflow(
+    request: WorkflowRequest,
+    options: WorkflowGenerationOptions = {}
+  ): Promise<WorkflowResult> {
     const cacheKey = JSON.stringify({ intent: request.userIntent, entities: request.entities });
     const cached = this.cache.get(cacheKey);
     if (cached) {
@@ -84,7 +91,9 @@ export class WorkflowArchitect {
     let reasoning = '';
     let workflow: WorkflowDefinition | undefined;
 
-    for (let attempt = 1; attempt <= this.maxIterations; attempt += 1) {
+    const maxIterations = options.maxIterations ?? this.maxIterations;
+
+    for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
       const messages = this.buildMessages(request.conversationHistory, systemPrompt, userMessage, lastErrors);
       const response = await this.callLLM(messages);
 
@@ -133,7 +142,7 @@ export class WorkflowArchitect {
       success: false,
       workflow,
       validationResult: { isValid: false, errors: lastErrors.map((message) => ({ message })) },
-      iterations: this.maxIterations,
+      iterations: maxIterations,
       reasoning,
     };
   }

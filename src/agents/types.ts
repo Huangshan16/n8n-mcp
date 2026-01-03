@@ -63,6 +63,8 @@ export interface AgentSession {
   history: ConversationTurn[];
   workflow?: WorkflowDefinition;
   blueprint?: WorkflowBlueprint;
+  intent?: Intent;
+  confirmed: boolean;
   userTurns: number;
   lastSummaryTurn: number;
   createdAt: string;

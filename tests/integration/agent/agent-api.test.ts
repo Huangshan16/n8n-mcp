@@ -72,7 +72,13 @@ describe('Agent API integration', () => {
 
       expect(chatResult.response.status).toBe(200);
       expect(chatResult.data.sessionId).toBeTruthy();
-      expect(chatResult.data.response.type).toBe('workflow_ready');
+      expect(chatResult.data.response.type).toBe('summary_ready');
+
+      const confirmResult = await postJson(`http://127.0.0.1:${port}/api/agent/confirm`, {
+        sessionId: chatResult.data.sessionId,
+      });
+      expect(confirmResult.response.status).toBe(200);
+      expect(confirmResult.data.response.type).toBe('workflow_ready');
 
       const workflowResult = await postJson(`http://127.0.0.1:${port}/api/workflow/create`, {
         sessionId: chatResult.data.sessionId,

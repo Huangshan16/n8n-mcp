@@ -90,4 +90,55 @@ describe('IntakeAgent', () => {
     expect(response.blueprint?.intentSummary).toContain('石头剪刀布');
     expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
   });
+
+  it('retries workflow generation on confirm up to max attempts', async () => {
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          category: 'game_interaction',
+          entities: { game_type: 'rps' },
+          confidence: 0.9,
+          missingInfo: [],
+        })
+      ),
+    };
+    const workflowArchitect = {
+      generateWorkflow: vi
+        .fn()
+        .mockResolvedValue({
+          success: false,
+          workflow: undefined,
+          validationResult: { isValid: false, errors: [{ message: 'invalid workflow' }] },
+          iterations: 1,
+          reasoning: '',
+        }),
+    };
+    const hardwareService = { inferComponentsFromIntent: vi.fn().mockReturnValue([]) } as any;
+    const sessionService = new SessionService();
+    const agent = new IntakeAgent(
+      {
+        llmProvider: 'openai',
+        llmModel: 'test',
+        llmApiKey: 'key',
+        maxConversationTurns: 4,
+        convergenceThreshold: 0.7,
+        llmTimeoutMs: 1000,
+        workflowCacheTtlSeconds: 300,
+        maxIterations: 2,
+        promptVariant: 'baseline',
+      },
+      llmClient as any,
+      workflowArchitect as any,
+      hardwareService,
+      sessionService,
+      []
+    );
+
+    const session = sessionService.getOrCreate();
+    await agent.processUserInput('我要玩石头剪刀布', session.id);
+    const response = await agent.confirmBlueprint(session.id);
+
+    expect(workflowArchitect.generateWorkflow).toHaveBeenCalledTimes(3);
+    expect(response.type).toBe('guidance');
+  });
 });

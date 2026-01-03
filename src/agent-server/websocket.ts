@@ -4,7 +4,7 @@ import { AgentService } from './agent-service';
 import { logger } from '../utils/logger';
 
 type IncomingMessage = {
-  type: 'user_message' | 'ping';
+  type: 'user_message' | 'confirm_workflow' | 'ping';
   sessionId?: string;
   message?: string;
 };
@@ -20,6 +20,23 @@ export function attachWebSocketServer(server: Server, agentService: AgentService
         const payload = JSON.parse(data.toString()) as IncomingMessage;
         if (payload.type === 'ping') {
           socket.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+
+        if (payload.type === 'confirm_workflow') {
+          if (!payload.sessionId) {
+            socket.send(JSON.stringify({ type: 'error', message: 'sessionId is required' }));
+            return;
+          }
+          logger.debug('WebSocket: confirm request received', { sessionId: payload.sessionId });
+          const result = await agentService.confirm(payload.sessionId);
+          socket.send(
+            JSON.stringify({
+              type: 'agent_response',
+              sessionId: result.sessionId,
+              response: result.response,
+            })
+          );
           return;
         }
 
