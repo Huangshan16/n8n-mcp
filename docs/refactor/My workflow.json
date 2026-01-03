@@ -1,0 +1,162 @@
+{
+  "name": "个性化手势交互流程",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "camera/frame",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "id": "Webhook_Camera",
+      "name": "摄像头输入",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 模拟 YOLO 输出\nreturn [\n  {\n    json: {\n      detections: [\n        { \"label\": \"老刘_人脸\", \"x\": 100, \"y\": 100 },\n        { \"label\": \"竖中指\", \"x\": 105, \"y\": 110 }\n      ]\n    }\n  }\n];"
+      },
+      "id": "YOLO_Detect",
+      "name": "YOLO 人脸 + 手势识别",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const detections = items[0].json.detections;\n\nlet face = detections.find(d => d.label.includes(\"人脸\"));\nlet gesture = detections.find(d => d.label === \"竖中指\" || d.label === \"V\");\n\nif (!face || !gesture) return [];\n\nreturn [\n  {\n    json: {\n      person: face.label.replace(\"_人脸\", \"\"),\n      gesture: gesture.label\n    }\n  }\n];"
+      },
+      "id": "Associate",
+      "name": "人脸 + 手势关联",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.person}}",
+              "operation": "equal",
+              "value2": "老刘"
+            },
+            {
+              "value1": "={{$json.gesture}}",
+              "operation": "equal",
+              "value2": "竖中指"
+            }
+          ]
+        }
+      },
+      "id": "IF_Liu",
+      "name": "IF 老刘 + 竖中指",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { text: \"滚\" } }];"
+      },
+      "id": "Liu_Action",
+      "name": "老刘行为",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "url": "http://speaker/play",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "id": "Speaker_Liu",
+      "name": "音箱播放（老刘）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1320, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.person}}",
+              "operation": "equal",
+              "value2": "老付"
+            },
+            {
+              "value1": "={{$json.gesture}}",
+              "operation": "equal",
+              "value2": "V"
+            }
+          ]
+        }
+      },
+      "id": "IF_Fu",
+      "name": "IF 老付 + V",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { text: \"你长得好帅\" } }];"
+      },
+      "id": "Fu_Action",
+      "name": "老付行为",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "url": "http://speaker/play",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "id": "Speaker_Fu",
+      "name": "音箱播放（老付）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1320, 420]
+    }
+  ],
+  "connections": {
+    "摄像头输入": {
+      "main": [[{ "node": "YOLO 人脸 + 手势识别", "type": "main", "index": 0 }]]
+    },
+    "YOLO 人脸 + 手势识别": {
+      "main": [[{ "node": "人脸 + 手势关联", "type": "main", "index": 0 }]]
+    },
+    "人脸 + 手势关联": {
+      "main": [
+        [{ "node": "IF 老刘 + 竖中指", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF 老刘 + 竖中指": {
+      "main": [
+        [{ "node": "老刘行为", "type": "main", "index": 0 }],
+        [{ "node": "IF 老付 + V", "type": "main", "index": 0 }]
+      ]
+    },
+    "老刘行为": {
+      "main": [[{ "node": "音箱播放（老刘）", "type": "main", "index": 0 }]]
+    },
+    "IF 老付 + V": {
+      "main": [
+        [{ "node": "老付行为", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "老付行为": {
+      "main": [[{ "node": "音箱播放（老付）", "type": "main", "index": 0 }]]
+    }
+  }
+}
