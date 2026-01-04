@@ -110,4 +110,85 @@ describe('WorkflowArchitect', () => {
     expect(result.success).toBe(true);
     expect(mcpClient.autofixWorkflow).toHaveBeenCalled();
   });
+
+  it('normalizes legacy if node conditions before validation', async () => {
+    const legacyWorkflow = {
+      name: 'Legacy If Workflow',
+      nodes: [
+        {
+          id: '1',
+          name: 'If',
+          type: 'n8n-nodes-base.if',
+          typeVersion: 2.3,
+          position: [100, 200],
+          parameters: {
+            conditions: {
+              string: [
+                {
+                  value1: '={{ $json.person_name }}',
+                  operation: 'equal',
+                  value2: '老刘',
+                },
+              ],
+            },
+            combineOperation: 'all',
+          },
+        },
+      ],
+      connections: {},
+    };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        ['Reasoning: 测试。', '```json', JSON.stringify(legacyWorkflow, null, 2), '```'].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.if',
+        displayName: 'If',
+        defaultVersion: 2.3,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockImplementation(async (workflow: any) => {
+        const ifNode = workflow.nodes.find((node: any) => node.type === 'n8n-nodes-base.if');
+        expect(ifNode.parameters.conditions).toEqual(
+          expect.objectContaining({
+            combinator: 'and',
+            conditions: [
+              expect.objectContaining({
+                operator: { type: 'string', operation: 'equals' },
+              }),
+            ],
+          })
+        );
+        return {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          suggestions: [],
+          statistics: {
+            totalNodes: 1,
+            enabledNodes: 1,
+            triggerNodes: 0,
+            validConnections: 0,
+            invalidConnections: 0,
+            expressionsValidated: 0,
+          },
+        };
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+    expect(mcpClient.validateWorkflow).toHaveBeenCalled();
+  });
 });

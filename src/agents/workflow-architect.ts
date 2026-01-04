@@ -9,6 +9,7 @@ import { SimpleCache } from '../utils/simple-cache';
 import { logger } from '../utils/logger';
 import { ALLOWED_NODE_TYPES } from './allowed-node-types';
 import type { ValidationResult } from './mcp-client';
+import { randomUUID } from 'crypto';
 
 export interface WorkflowRequest {
   sessionId?: string;
@@ -119,6 +120,7 @@ export class WorkflowArchitect {
       reasoning = this.extractReasoning(response);
       try {
         workflow = this.extractWorkflow(response);
+        workflow = this.normalizeWorkflow(workflow);
       } catch (error) {
         lastErrors = [
           error instanceof Error ? error.message : 'LLM未返回有效的工作流JSON',
@@ -306,6 +308,106 @@ export class WorkflowArchitect {
     }
 
     return parsed;
+  }
+
+  private normalizeWorkflow(workflow: WorkflowDefinition): WorkflowDefinition {
+    if (!Array.isArray(workflow.nodes)) {
+      return workflow;
+    }
+    workflow.nodes.forEach((node) => {
+      if (node?.type !== 'n8n-nodes-base.if') {
+        return;
+      }
+      const params = (node?.parameters ?? {}) as Record<string, any>;
+      if (!params.conditions) {
+        return;
+      }
+      if (params.conditions.combinator && Array.isArray(params.conditions.conditions)) {
+        if (params.combineOperation) {
+          delete params.combineOperation;
+        }
+        return;
+      }
+      const normalized = this.convertLegacyIfConditions(params.conditions, params.combineOperation);
+      if (normalized.conditions.length > 0) {
+        params.conditions = normalized;
+        delete params.combineOperation;
+      }
+    });
+    return workflow;
+  }
+
+  private convertLegacyIfConditions(conditions: any, combineOperation?: string): {
+    combinator: 'and' | 'or';
+    conditions: Array<{
+      id: string;
+      leftValue: unknown;
+      rightValue: unknown;
+      operator: { type: string; operation: string };
+    }>;
+  } {
+    const combinator: 'and' | 'or' = combineOperation === 'any' ? 'or' : 'and';
+    const normalizedConditions: Array<{
+      id: string;
+      leftValue: unknown;
+      rightValue: unknown;
+      operator: { type: string; operation: string };
+    }> = [];
+
+    if (!conditions || typeof conditions !== 'object') {
+      return { combinator, conditions: normalizedConditions };
+    }
+
+    Object.entries(conditions).forEach(([type, entries]) => {
+      if (!Array.isArray(entries)) {
+        return;
+      }
+      entries.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+        normalizedConditions.push({
+          id: entry.id ?? randomUUID(),
+          leftValue: entry.value1 ?? entry.leftValue,
+          rightValue: entry.value2 ?? entry.rightValue ?? '',
+          operator: {
+            type,
+            operation: this.mapLegacyOperation(entry.operation),
+          },
+        });
+      });
+    });
+
+    return { combinator, conditions: normalizedConditions };
+  }
+
+  private mapLegacyOperation(operation: string | undefined): string {
+    if (!operation) {
+      return 'equals';
+    }
+    const mapping: Record<string, string> = {
+      equal: 'equals',
+      notEqual: 'notEquals',
+      contains: 'contains',
+      notContains: 'notContains',
+      startsWith: 'startsWith',
+      endsWith: 'endsWith',
+      regex: 'regex',
+      notRegex: 'notRegex',
+      exists: 'exists',
+      notExists: 'notExists',
+      empty: 'empty',
+      notEmpty: 'notEmpty',
+      isEmpty: 'empty',
+      isNotEmpty: 'notEmpty',
+      larger: 'gt',
+      largerEqual: 'gte',
+      smaller: 'lt',
+      smallerEqual: 'lte',
+      isTrue: 'true',
+      isFalse: 'false',
+    };
+    return mapping[operation] ?? operation;
   }
 
   private summarizeValidation(validation: ValidationResult): ValidationSummary {
