@@ -21,8 +21,8 @@ export class WorkflowDeployer {
     }
 
     const n8nClient = new N8nApiClient(config);
-    const baseUrl = stripApiBase(config.baseUrl);
-    return new WorkflowDeployer(n8nClient, baseUrl);
+    const workflowBaseUrl = stripApiBase(config.publicUrl ?? config.baseUrl);
+    return new WorkflowDeployer(n8nClient, workflowBaseUrl);
   }
 
   async createWorkflow(workflow: WorkflowDefinition): Promise<WorkflowCreateResult> {

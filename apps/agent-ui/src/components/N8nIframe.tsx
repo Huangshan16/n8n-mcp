@@ -3,6 +3,13 @@ interface N8nIframeProps {
 }
 
 const IFRAME_URL = import.meta.env.VITE_N8N_IFRAME_URL || 'http://localhost:5678/home/workflows';
+const IFRAME_LABEL = (() => {
+  try {
+    return new URL(IFRAME_URL).host;
+  } catch {
+    return IFRAME_URL;
+  }
+})();
 
 export function N8nIframe({ refreshToken }: N8nIframeProps) {
   return (
@@ -12,7 +19,7 @@ export function N8nIframe({ refreshToken }: N8nIframeProps) {
           <p className="orbitron text-[11px] uppercase tracking-[0.35em] text-cyan-400/70">n8n Control</p>
           <p className="text-xs text-cyan-100/70">实时查看工作流拓扑</p>
         </div>
-        <span className="mono text-[10px] text-cyan-400/60">LOCALHOST:5678</span>
+        <span className="mono text-[10px] text-cyan-400/60">{IFRAME_LABEL}</span>
       </div>
       <div className="relative flex-1 bg-black/40">
         <iframe

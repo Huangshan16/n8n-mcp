@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 // n8n API configuration schema
 const n8nApiConfigSchema = z.object({
   N8N_API_URL: z.string().url().optional(),
+  N8N_PUBLIC_URL: z.string().url().optional(),
+  N8N_BASE_URL: z.string().url().optional(),
   N8N_API_KEY: z.string().min(1).optional(),
   N8N_API_TIMEOUT: z.coerce.number().positive().default(30000),
   N8N_API_MAX_RETRIES: z.coerce.number().positive().default(3),
@@ -36,6 +38,7 @@ export function getN8nApiConfig() {
   
   return {
     baseUrl: config.N8N_API_URL,
+    publicUrl: config.N8N_PUBLIC_URL || config.N8N_BASE_URL,
     apiKey: config.N8N_API_KEY,
     timeout: config.N8N_API_TIMEOUT,
     maxRetries: config.N8N_API_MAX_RETRIES,
@@ -54,6 +57,8 @@ export function isN8nApiConfigured(): boolean {
  */
 export function getN8nApiConfigFromContext(context: {
   n8nApiUrl?: string;
+  n8nPublicUrl?: string;
+  n8nBaseUrl?: string;
   n8nApiKey?: string;
   n8nApiTimeout?: number;
   n8nApiMaxRetries?: number;
@@ -64,6 +69,7 @@ export function getN8nApiConfigFromContext(context: {
 
   return {
     baseUrl: context.n8nApiUrl,
+    publicUrl: context.n8nPublicUrl ?? context.n8nBaseUrl,
     apiKey: context.n8nApiKey,
     timeout: context.n8nApiTimeout ?? 30000,
     maxRetries: context.n8nApiMaxRetries ?? 3,
