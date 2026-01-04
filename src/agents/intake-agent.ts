@@ -47,7 +47,8 @@ export class IntakeAgent {
       { ...intent.entities, ...inlineEntities },
       userMessage
     );
-    const resolvedCategory = this.resolveCategory(intent.category, userMessage, normalizedEntities);
+    const normalizedCategory = this.normalizeCategory(intent.category);
+    const resolvedCategory = this.resolveCategory(normalizedCategory, userMessage, normalizedEntities);
     const existingEntities = this.sessionService.getConfirmedEntities(sessionId);
     this.sessionService.mergeConfirmedEntities(sessionId, normalizedEntities);
     const explicitKeys = this.extractExplicitKeys(userMessage, inlineEntities);
@@ -520,6 +521,23 @@ ${hardwareLines}
       return 'face_recognition_action';
     }
     return category || 'custom';
+  }
+
+  private normalizeCategory(category?: string): Intent['category'] {
+    const normalized = (category ?? 'custom').trim().toLowerCase();
+    if (['face_recognition_action', 'face-recognition-action', 'face_recognition', 'face recognition'].includes(normalized)) {
+      return 'face_recognition_action';
+    }
+    if (['emotion_interaction', 'emotion-interaction', 'emotion'].includes(normalized)) {
+      return 'emotion_interaction';
+    }
+    if (['game_interaction', 'game-interaction', 'game'].includes(normalized)) {
+      return 'game_interaction';
+    }
+    if (['custom'].includes(normalized)) {
+      return 'custom';
+    }
+    return 'custom';
   }
 
   private normalizeEntities(entities: Record<string, string>, message: string): Record<string, string> {
