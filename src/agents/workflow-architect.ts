@@ -305,18 +305,9 @@ export class WorkflowArchitect {
 
   private extractWorkflow(response: string): WorkflowDefinition {
     const candidates: string[] = [];
-    const jsonBlock = response.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonBlock?.[1]) {
-      candidates.push(jsonBlock[1]);
-    }
-    const braceStart = response.indexOf('{');
-    if (braceStart >= 0) {
-      const braceEnd = response.lastIndexOf('}');
-      if (braceEnd > braceStart) {
-        candidates.push(response.slice(braceStart, braceEnd + 1));
-      } else {
-        candidates.push(response.slice(braceStart));
-      }
+    const primary = this.extractJsonCandidate(response);
+    if (primary) {
+      candidates.push(primary);
     }
 
     const errors: string[] = [];
@@ -333,6 +324,22 @@ export class WorkflowArchitect {
     }
 
     throw new Error(errors[0] ?? 'LLM未返回有效的工作流JSON');
+  }
+
+  private extractJsonCandidate(response: string): string | null {
+    const jsonBlock = response.match(/```json\n([\s\S]*?)\n```/);
+    if (jsonBlock?.[1]) {
+      return jsonBlock[1];
+    }
+    const braceStart = response.indexOf('{');
+    if (braceStart >= 0) {
+      const braceEnd = response.lastIndexOf('}');
+      if (braceEnd > braceStart) {
+        return response.slice(braceStart, braceEnd + 1);
+      }
+      return response.slice(braceStart);
+    }
+    return null;
   }
 
   private parseWorkflow(rawJson: string): WorkflowDefinition {
@@ -378,7 +385,8 @@ export class WorkflowArchitect {
 2. 保留原意，不要添加新字段。
 3. 确保JSON可以被JSON.parse解析。
 `.trim();
-    const repairUserMessage = `修复以下JSON并仅输出修复后的JSON：\n${response}`;
+    const candidate = this.extractJsonCandidate(response);
+    const repairUserMessage = `修复以下JSON并仅输出修复后的JSON：\n${candidate ?? response}`;
     const repairResponse = await this.callLLM([
       { role: 'system', content: repairSystemPrompt },
       { role: 'user', content: repairUserMessage },
@@ -407,6 +415,8 @@ export class WorkflowArchitect {
       return workflow;
     }
     this.ensureNodeIds(workflow.nodes);
+    this.normalizeConnections(workflow);
+    this.ensureWebhookResponseHandling(workflow);
     workflow.nodes.forEach((node) => {
       if (node?.type !== 'n8n-nodes-base.if') {
         return;
@@ -428,6 +438,66 @@ export class WorkflowArchitect {
       }
     });
     return workflow;
+  }
+
+  private normalizeConnections(workflow: WorkflowDefinition): void {
+    if (!workflow.connections || typeof workflow.connections !== 'object') {
+      return;
+    }
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    const idToName = new Map<string, string>();
+    nodes.forEach((node) => {
+      if (node?.id && node?.name) {
+        idToName.set(node.id, node.name);
+      }
+    });
+
+    const normalized: Record<string, unknown> = {};
+    Object.entries(workflow.connections).forEach(([source, mapping]) => {
+      const sourceName = idToName.get(source) ?? source;
+      normalized[sourceName] = this.normalizeConnectionMapping(mapping, idToName);
+    });
+    workflow.connections = normalized as WorkflowDefinition['connections'];
+  }
+
+  private normalizeConnectionMapping(mapping: unknown, idToName: Map<string, string>): unknown {
+    if (!mapping || typeof mapping !== 'object') {
+      return mapping;
+    }
+    const result: Record<string, unknown> = {};
+    Object.entries(mapping as Record<string, unknown>).forEach(([key, groups]) => {
+      if (!Array.isArray(groups)) {
+        result[key] = groups;
+        return;
+      }
+      result[key] = groups.map((group) => {
+        if (!Array.isArray(group)) {
+          return group;
+        }
+        return group.map((connection) => {
+          if (!connection || typeof connection !== 'object') {
+            return connection;
+          }
+          const nodeRef = (connection as { node?: string }).node;
+          const nodeName = nodeRef ? idToName.get(nodeRef) ?? nodeRef : nodeRef;
+          return { ...(connection as Record<string, unknown>), node: nodeName };
+        });
+      });
+    });
+    return result;
+  }
+
+  private ensureWebhookResponseHandling(workflow: WorkflowDefinition): void {
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    nodes.forEach((node) => {
+      if (node?.type !== 'n8n-nodes-base.webhook') {
+        return;
+      }
+      const params = (node?.parameters ?? {}) as Record<string, unknown>;
+      if (params.responseMode === 'responseNode' && node.onError !== 'continueRegularOutput') {
+        node.onError = 'continueRegularOutput';
+      }
+    });
   }
 
   private ensureNodeIds(nodes: Array<Record<string, any>>): void {

@@ -339,4 +339,91 @@ describe('WorkflowArchitect', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('normalizes connections to node names and fixes webhook response handling', async () => {
+    const workflow = {
+      name: 'Normalize Connections',
+      nodes: [
+        {
+          id: 'node_webhook',
+          name: 'Webhook',
+          type: 'n8n-nodes-base.webhook',
+          typeVersion: 2.1,
+          position: [0, 0],
+          parameters: {
+            httpMethod: 'POST',
+            path: 'test',
+            responseMode: 'responseNode',
+            options: {},
+          },
+        },
+        {
+          id: 'node_if',
+          name: 'IF',
+          type: 'n8n-nodes-base.if',
+          typeVersion: 2.3,
+          position: [200, 0],
+          parameters: { conditions: { combinator: 'and', conditions: [] } },
+        },
+      ],
+      connections: {
+        node_webhook: {
+          main: [
+            [
+              {
+                node: 'node_if',
+                type: 'main',
+                index: 0,
+              },
+            ],
+          ],
+        },
+      },
+    };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        ['Reasoning: 测试。', '```json', JSON.stringify(workflow, null, 2), '```'].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2.1,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockImplementation(async (wf: any) => {
+        expect(wf.connections).toHaveProperty('Webhook');
+        expect(wf.connections.Webhook.main[0][0].node).toBe('IF');
+        const webhook = wf.nodes.find((node: any) => node.type === 'n8n-nodes-base.webhook');
+        expect(webhook.onError).toBe('continueRegularOutput');
+        return {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          suggestions: [],
+          statistics: {
+            totalNodes: wf.nodes.length,
+            enabledNodes: wf.nodes.length,
+            triggerNodes: 1,
+            validConnections: 0,
+            invalidConnections: 0,
+            expressionsValidated: 0,
+          },
+        };
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
