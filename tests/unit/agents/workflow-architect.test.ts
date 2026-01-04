@@ -426,4 +426,84 @@ describe('WorkflowArchitect', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('normalizes set values and http request defaults', async () => {
+    const workflow = {
+      name: 'Normalize Defaults',
+      nodes: [
+        {
+          id: 'node_set',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          position: [0, 0],
+          parameters: {
+            values: {
+              string: [
+                {
+                  name: 'text',
+                  value: 'hello',
+                },
+              ],
+            },
+          },
+        },
+        {
+          id: 'node_http',
+          name: 'HTTP',
+          type: 'n8n-nodes-base.httpRequest',
+          position: [200, 0],
+          parameters: {
+            url: 'https://example.com',
+          },
+        },
+      ],
+      connections: {},
+    };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        ['Reasoning: 测试。', '```json', JSON.stringify(workflow, null, 2), '```'].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.set',
+        displayName: 'Set',
+        defaultVersion: 3.4,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockImplementation(async (wf: any) => {
+        const setNode = wf.nodes.find((node: any) => node.type === 'n8n-nodes-base.set');
+        expect(setNode.parameters.assignments).toBeDefined();
+        expect(setNode.parameters.includeOtherFields).toBe(false);
+        const httpNode = wf.nodes.find((node: any) => node.type === 'n8n-nodes-base.httpRequest');
+        expect(httpNode.onError).toBe('continueErrorOutput');
+        return {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          suggestions: [],
+          statistics: {
+            totalNodes: wf.nodes.length,
+            enabledNodes: wf.nodes.length,
+            triggerNodes: 0,
+            validConnections: 0,
+            invalidConnections: 0,
+            expressionsValidated: 0,
+          },
+        };
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

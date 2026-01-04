@@ -54,8 +54,16 @@ ${toolDescriptions.map((line) => `- ${line}`).join('\n')}
 1. 先search_nodes，再get_node，最后validate_workflow
 2. HTTP节点用于调用硬件API，优先使用硬件组件defaultConfig
 3. 只能使用白名单节点：${allowedNodeTypes.join(', ')}
-4. 连接格式必须符合n8n标准
-5. 节点位置从[100, 200]开始，水平间隔220
+4. 节点必须包含 id(UUID)、name、type、typeVersion、position、parameters
+5. connections 必须使用节点 name（不是 id）
+6. Webhook 默认使用 responseMode: "onReceived"，仅当必须使用 responseNode 时添加 onError: "continueRegularOutput"
+7. IF 使用 filter 结构：conditions.combinator + conditions.conditions，并包含 options.version/typeValidation
+8. Set 使用 assignments.assignments，includeOtherFields: false
+9. HTTP Request 设置 onError: "continueErrorOutput"
+10. 连接格式必须符合 n8n 标准
+11. 节点位置从[100, 200]开始，水平间隔220
+
+JSON 输出必须严格有效：双引号、无注释、无尾随逗号。
 
 # 常见错误修复
 ${renderErrorPatterns()}

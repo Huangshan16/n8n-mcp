@@ -232,6 +232,8 @@ export class WorkflowArchitect {
 3. 输出完整workflow JSON（包含nodes/connections/settings）
 4. 仅使用允许的节点类型：${ALLOWED_NODE_TYPES.join(', ')}
 5. 先输出Reasoning，再输出JSON代码块
+6. connections 必须用节点 name（不要用 id）
+7. JSON 必须严格合法（双引号，无注释，无尾逗号）
 `;
   }
 
@@ -416,8 +418,8 @@ export class WorkflowArchitect {
     }
     this.ensureNodeIds(workflow.nodes);
     this.normalizeConnections(workflow);
-    this.ensureWebhookResponseHandling(workflow);
     workflow.nodes.forEach((node) => {
+      this.normalizeNode(node);
       if (node?.type !== 'n8n-nodes-base.if') {
         return;
       }
@@ -438,6 +440,155 @@ export class WorkflowArchitect {
       }
     });
     return workflow;
+  }
+
+  private normalizeNode(node: Record<string, any> | undefined): void {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    if (!node.parameters || typeof node.parameters !== 'object') {
+      node.parameters = {};
+    }
+    this.ensureDefaultTypeVersion(node);
+
+    switch (node.type) {
+      case 'n8n-nodes-base.webhook':
+        this.normalizeWebhookNode(node);
+        break;
+      case 'n8n-nodes-base.if':
+        this.normalizeIfNode(node);
+        break;
+      case 'n8n-nodes-base.set':
+        this.normalizeSetNode(node);
+        break;
+      case 'n8n-nodes-base.httpRequest':
+        this.normalizeHttpRequestNode(node);
+        break;
+      case 'n8n-nodes-base.scheduleTrigger':
+        this.normalizeScheduleTriggerNode(node);
+        break;
+      case 'n8n-nodes-base.splitInBatches':
+        this.normalizeSplitInBatchesNode(node);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private ensureDefaultTypeVersion(node: Record<string, any>): void {
+    const defaults: Record<string, number> = {
+      'n8n-nodes-base.webhook': 2,
+      'n8n-nodes-base.scheduleTrigger': 1.1,
+      'n8n-nodes-base.if': 2.2,
+      'n8n-nodes-base.splitInBatches': 3,
+      'n8n-nodes-base.set': 3.4,
+      'n8n-nodes-base.httpRequest': 4.3,
+    };
+    if (typeof node.typeVersion !== 'number' && typeof defaults[node.type] === 'number') {
+      node.typeVersion = defaults[node.type];
+    }
+  }
+
+  private normalizeWebhookNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.httpMethod) {
+      params.httpMethod = 'POST';
+    }
+    if (!params.path) {
+      params.path = 'webhook';
+    }
+    if (!params.responseMode) {
+      params.responseMode = 'onReceived';
+    }
+    if (!params.options) {
+      params.options = {};
+    }
+    if (params.responseMode === 'responseNode' && node.onError !== 'continueRegularOutput') {
+      node.onError = 'continueRegularOutput';
+    }
+  }
+
+  private normalizeIfNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.conditions) {
+      return;
+    }
+    if (!params.conditions.combinator) {
+      params.conditions.combinator = 'and';
+    }
+    if (!params.conditions.options) {
+      params.conditions.options = {
+        version: 2,
+        caseSensitive: true,
+        typeValidation: 'loose',
+        leftValue: '',
+      };
+    }
+  }
+
+  private normalizeSetNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.assignments && params.values) {
+      params.assignments = { assignments: this.convertSetValues(params.values) };
+      delete params.values;
+    }
+    if (!params.assignments) {
+      params.assignments = { assignments: [] };
+    }
+    if (!params.options) {
+      params.options = {};
+    }
+    if (typeof params.includeOtherFields !== 'boolean') {
+      params.includeOtherFields = false;
+    }
+  }
+
+  private convertSetValues(values: Record<string, any>): Array<Record<string, unknown>> {
+    const assignments: Array<Record<string, unknown>> = [];
+    Object.entries(values).forEach(([type, entries]) => {
+      if (!Array.isArray(entries)) {
+        return;
+      }
+      entries.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return;
+        }
+        assignments.push({
+          id: entry.id ?? randomUUID(),
+          name: entry.name ?? entry.field ?? '',
+          type,
+          value: entry.value ?? '',
+        });
+      });
+    });
+    return assignments;
+  }
+
+  private normalizeHttpRequestNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.options) {
+      params.options = {};
+    }
+    if (typeof node.onError !== 'string') {
+      node.onError = 'continueErrorOutput';
+    }
+  }
+
+  private normalizeScheduleTriggerNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.rule) {
+      params.rule = { interval: [{ field: 'minutes', minutesInterval: 5 }] };
+    }
+  }
+
+  private normalizeSplitInBatchesNode(node: Record<string, any>): void {
+    const params = node.parameters as Record<string, any>;
+    if (!params.batchSize) {
+      params.batchSize = 1;
+    }
+    if (!params.options) {
+      params.options = { reset: false };
+    }
   }
 
   private normalizeConnections(workflow: WorkflowDefinition): void {
@@ -485,19 +636,6 @@ export class WorkflowArchitect {
       });
     });
     return result;
-  }
-
-  private ensureWebhookResponseHandling(workflow: WorkflowDefinition): void {
-    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
-    nodes.forEach((node) => {
-      if (node?.type !== 'n8n-nodes-base.webhook') {
-        return;
-      }
-      const params = (node?.parameters ?? {}) as Record<string, unknown>;
-      if (params.responseMode === 'responseNode' && node.onError !== 'continueRegularOutput') {
-        node.onError = 'continueRegularOutput';
-      }
-    });
   }
 
   private ensureNodeIds(nodes: Array<Record<string, any>>): void {
