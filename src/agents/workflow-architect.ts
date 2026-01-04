@@ -299,15 +299,67 @@ export class WorkflowArchitect {
   }
 
   private extractWorkflow(response: string): WorkflowDefinition {
+    const candidates: string[] = [];
     const jsonBlock = response.match(/```json\n([\s\S]*?)\n```/);
-    const rawJson = jsonBlock ? jsonBlock[1] : response;
-
-    const parsed = JSON.parse(rawJson) as WorkflowDefinition;
-    if (!parsed?.name || !parsed?.nodes || !parsed?.connections) {
-      throw new Error('工作流JSON缺少name/nodes/connections');
+    if (jsonBlock?.[1]) {
+      candidates.push(jsonBlock[1]);
+    }
+    const braceStart = response.indexOf('{');
+    if (braceStart >= 0) {
+      const braceEnd = response.lastIndexOf('}');
+      if (braceEnd > braceStart) {
+        candidates.push(response.slice(braceStart, braceEnd + 1));
+      } else {
+        candidates.push(response.slice(braceStart));
+      }
     }
 
-    return parsed;
+    const errors: string[] = [];
+    for (const candidate of candidates) {
+      try {
+        const parsed = this.parseWorkflow(candidate);
+        if (!parsed?.name || !parsed?.nodes || !parsed?.connections) {
+          throw new Error('工作流JSON缺少name/nodes/connections');
+        }
+        return parsed;
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : '无法解析工作流JSON');
+      }
+    }
+
+    throw new Error(errors[0] ?? 'LLM未返回有效的工作流JSON');
+  }
+
+  private parseWorkflow(rawJson: string): WorkflowDefinition {
+    const trimmed = rawJson.trim();
+    try {
+      return JSON.parse(trimmed) as WorkflowDefinition;
+    } catch (error) {
+      const repaired = this.repairJson(trimmed);
+      if (repaired && repaired !== trimmed) {
+        return JSON.parse(repaired) as WorkflowDefinition;
+      }
+      throw error;
+    }
+  }
+
+  private repairJson(rawJson: string): string | null {
+    if (!rawJson.startsWith('{')) {
+      return null;
+    }
+    const openCurly = (rawJson.match(/{/g) ?? []).length;
+    const closeCurly = (rawJson.match(/}/g) ?? []).length;
+    const openSquare = (rawJson.match(/\[/g) ?? []).length;
+    const closeSquare = (rawJson.match(/]/g) ?? []).length;
+
+    let repaired = rawJson;
+    if (openSquare > closeSquare) {
+      repaired += ']'.repeat(openSquare - closeSquare);
+    }
+    if (openCurly > closeCurly) {
+      repaired += '}'.repeat(openCurly - closeCurly);
+    }
+    return repaired;
   }
 
   private normalizeWorkflow(workflow: WorkflowDefinition): WorkflowDefinition {

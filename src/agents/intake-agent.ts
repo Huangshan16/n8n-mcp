@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 export class IntakeAgent {
   private static readonly SUMMARY_CADENCE = 3;
   private static readonly CONFIRM_MAX_ATTEMPTS = 3;
+  private static readonly CONFIRM_WORKFLOW_ITERATIONS = 2;
   private agentLogger = new AgentLogger();
 
   constructor(
@@ -182,7 +183,7 @@ export class IntakeAgent {
           hardwareComponents,
           conversationHistory: history,
         },
-        { maxIterations: 1 }
+        { maxIterations: IntakeAgent.CONFIRM_WORKFLOW_ITERATIONS }
       );
 
       if (result.success && result.workflow) {

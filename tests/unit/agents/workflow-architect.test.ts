@@ -191,4 +191,46 @@ describe('WorkflowArchitect', () => {
     expect(result.success).toBe(true);
     expect(mcpClient.validateWorkflow).toHaveBeenCalled();
   });
+
+  it('repairs truncated JSON responses', async () => {
+    const truncated = '{\n  "name": "Truncated",\n  "nodes": [],\n  "connections": {}\n';
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(['Reasoning: 测试。', '```json', truncated, '```'].join('\n')),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockResolvedValue({
+        isValid: true,
+        errors: [],
+        warnings: [],
+        suggestions: [],
+        statistics: {
+          totalNodes: 0,
+          enabledNodes: 0,
+          triggerNodes: 0,
+          validConnections: 0,
+          invalidConnections: 0,
+          expressionsValidated: 0,
+        },
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.workflow?.name).toBe('Truncated');
+  });
 });
