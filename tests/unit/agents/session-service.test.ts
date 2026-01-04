@@ -43,6 +43,17 @@ describe('SessionService', () => {
     expect(merged.tts_voice).toBe('a');
   });
 
+  it('updates confirmed entities when explicitly overwritten', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+
+    service.mergeConfirmedEntities(session.id, { person_name: '老刘', gesture: '中指' });
+    const updated = service.updateConfirmedEntities(session.id, { gesture: '比V' });
+
+    expect(updated.gesture).toBe('比V');
+    expect(updated.person_name).toBe('老刘');
+  });
+
   it('resets session state', () => {
     const service = new SessionService();
     const session = service.getOrCreate();

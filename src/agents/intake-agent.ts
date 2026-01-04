@@ -43,16 +43,30 @@ export class IntakeAgent {
 
     const intent = await this.extractIntent(userMessage, history);
     const inlineEntities = this.extractInlineEntities(userMessage);
-    const confirmedEntities = this.sessionService.mergeConfirmedEntities(sessionId, {
-      ...intent.entities,
-      ...inlineEntities,
-    });
+    const normalizedEntities = this.normalizeEntities(
+      { ...intent.entities, ...inlineEntities },
+      userMessage
+    );
+    const resolvedCategory = this.resolveCategory(intent.category, userMessage, normalizedEntities);
+    const existingEntities = this.sessionService.getConfirmedEntities(sessionId);
+    this.sessionService.mergeConfirmedEntities(sessionId, normalizedEntities);
+    const explicitKeys = this.extractExplicitKeys(userMessage, inlineEntities);
+    const overrideEntities = this.pickOverrideEntities(
+      existingEntities,
+      normalizedEntities,
+      explicitKeys
+    );
+    if (Object.keys(overrideEntities).length > 0) {
+      this.sessionService.updateConfirmedEntities(sessionId, overrideEntities);
+    }
+    const confirmedEntities = this.sessionService.getConfirmedEntities(sessionId);
     const effectiveIntent: Intent = {
       ...intent,
+      category: resolvedCategory,
       entities: confirmedEntities,
     };
-    const missingInfo = this.getMissingInfo(intent.category, confirmedEntities, userMessage);
-    const blueprint = this.buildBlueprint(userMessage, intent.category, confirmedEntities, missingInfo);
+    const missingInfo = this.getMissingInfo(resolvedCategory, confirmedEntities, userMessage);
+    const blueprint = this.buildBlueprint(userMessage, resolvedCategory, confirmedEntities, missingInfo);
     this.sessionService.setIntent(sessionId, effectiveIntent);
     this.sessionService.setBlueprint(sessionId, blueprint);
     this.sessionService.setWorkflowSummary(sessionId, undefined);
@@ -61,7 +75,7 @@ export class IntakeAgent {
 
     logger.debug('IntakeAgent: intent summary', {
       sessionId,
-      category: intent.category,
+      category: resolvedCategory,
       confirmedEntities,
       missingInfo,
     });
@@ -106,7 +120,7 @@ export class IntakeAgent {
       return response;
     }
 
-    const question = await this.generateGuidanceQuestion(intent.category, confirmedEntities, missingInfo);
+    const question = await this.generateGuidanceQuestion(resolvedCategory, confirmedEntities, missingInfo);
     const response: AgentResponse = {
       type: 'guidance',
       message: question,
@@ -441,6 +455,10 @@ ${hardwareLines}
     requiredFields.forEach((field) => {
       if (!confirmedEntities[field]) {
         missingFields.add(field);
+        return;
+      }
+      if (field === 'speech_content' && this.isGenericSpeechContent(confirmedEntities[field])) {
+        missingFields.add(field);
       }
     });
 
@@ -461,8 +479,7 @@ ${hardwareLines}
       entities.tts_voice = voiceMatch[1].toLowerCase();
     }
 
-    const gestureKeywords = ['竖中指', '比个V', '比V', '点赞', '挥手', '招手', '握手'];
-    const gesture = gestureKeywords.find((keyword) => message.includes(keyword));
+    const gesture = this.findGestureKeyword(message);
     if (gesture) {
       entities.gesture = gesture;
     }
@@ -483,6 +500,166 @@ ${hardwareLines}
     }
 
     return entities;
+  }
+
+  private resolveCategory(
+    category: Intent['category'],
+    message: string,
+    entities: Record<string, string>
+  ): Intent['category'] {
+    if (category && category !== 'custom') {
+      return category;
+    }
+    if (entities.game_type || message.includes('石头剪刀布')) {
+      return 'game_interaction';
+    }
+    if (entities.emotion_mode || message.includes('情感') || message.includes('共情')) {
+      return 'emotion_interaction';
+    }
+    if (entities.person_name || entities.gesture || message.includes('识别') || message.includes('见到')) {
+      return 'face_recognition_action';
+    }
+    return category || 'custom';
+  }
+
+  private normalizeEntities(entities: Record<string, string>, message: string): Record<string, string> {
+    const normalized: Record<string, string> = {};
+    Object.entries(entities).forEach(([key, value]) => {
+      if (!value) {
+        return;
+      }
+      if (key === 'person_name') {
+        const person = this.normalizePersonName(value, message);
+        if (person) {
+          normalized.person_name = person;
+        }
+        return;
+      }
+      if (key === 'gesture') {
+        const gesture = this.normalizeGesture(value);
+        if (gesture) {
+          normalized.gesture = gesture;
+        }
+        return;
+      }
+      if (key === 'speech_content') {
+        const speech = this.normalizeSpeechContent(value, message);
+        if (speech) {
+          normalized.speech_content = speech;
+        }
+        return;
+      }
+      if (key === 'tts_voice') {
+        normalized.tts_voice = value.toLowerCase();
+        return;
+      }
+      normalized[key] = value;
+    });
+    return normalized;
+  }
+
+  private normalizePersonName(value: string, message: string): string {
+    const cleaned = value.replace(/[，,。！？!?\s]/g, '');
+    const candidates = Array.from(message.matchAll(/老[\u4e00-\u9fa5]{1,2}/g)).map((m) => m[0]);
+    const candidate = candidates[0] ?? cleaned;
+    const suffixes = ['竖', '比', '举', '做', '打', '挥', '招', '握', '骂', '喊', '说', '见'];
+    if (candidate.length >= 3 && suffixes.includes(candidate[candidate.length - 1])) {
+      return candidate.slice(0, -1);
+    }
+    return candidate;
+  }
+
+  private normalizeGesture(value: string): string {
+    const normalized = value.replace(/\s/g, '');
+    if (/竖.*中指|中指/.test(normalized)) {
+      return '中指';
+    }
+    if (/比.*V|V手势|V/.test(normalized)) {
+      return 'V';
+    }
+    if (/点赞|大拇指/.test(normalized)) {
+      return '大拇指';
+    }
+    if (/挥手|招手/.test(normalized)) {
+      return '挥手';
+    }
+    if (/握手/.test(normalized)) {
+      return '握手';
+    }
+    return value;
+  }
+
+  private normalizeSpeechContent(value: string, message: string): string {
+    const quoteMatch = message.match(/["“]([^"”]{1,20})["”]/);
+    if (quoteMatch?.[1]) {
+      return quoteMatch[1];
+    }
+    const trimmed = value.trim();
+    if (this.isGenericSpeechContent(trimmed)) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  private isGenericSpeechContent(value: string): boolean {
+    const normalized = value.replace(/\s/g, '');
+    return (
+      ['骂人', '打招呼', '问候', '问好', '寒暄', '打声招呼', '说话', '聊天'].includes(normalized)
+    );
+  }
+
+  private extractExplicitKeys(message: string, inlineEntities: Record<string, string>): Set<string> {
+    const keys = new Set(Object.keys(inlineEntities));
+    if (message.match(/["“]([^"”]{1,20})["”]/)) {
+      keys.add('speech_content');
+    }
+    if (message.match(/音色\s*[abc]/i)) {
+      keys.add('tts_voice');
+    }
+    if (message.match(/(?:叫|名字是|名叫)/)) {
+      keys.add('person_name');
+    }
+    if (this.findGestureKeyword(message)) {
+      keys.add('gesture');
+    }
+    if (message.includes('说') || message.includes('具体说')) {
+      keys.add('speech_content');
+    }
+    return keys;
+  }
+
+  private pickOverrideEntities(
+    existing: Record<string, string>,
+    incoming: Record<string, string>,
+    explicitKeys: Set<string>
+  ): Record<string, string> {
+    const overrides: Record<string, string> = {};
+    Object.entries(incoming).forEach(([key, value]) => {
+      if (!value) {
+        return;
+      }
+      const current = existing[key];
+      if (!current || current === value) {
+        return;
+      }
+      if (explicitKeys.has(key)) {
+        overrides[key] = value;
+        return;
+      }
+      if (key === 'speech_content') {
+        const currentGeneric = this.isGenericSpeechContent(current);
+        const nextGeneric = this.isGenericSpeechContent(value);
+        if (currentGeneric && !nextGeneric) {
+          overrides[key] = value;
+        }
+      }
+    });
+    return overrides;
+  }
+
+  private findGestureKeyword(message: string): string | null {
+    const gestureKeywords = ['竖中指', '比个V', '比V', '点赞', '挥手', '招手', '握手'];
+    return gestureKeywords.find((keyword) => message.includes(keyword)) ?? null;
   }
 
   private generateSummary(

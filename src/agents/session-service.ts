@@ -163,6 +163,23 @@ export class SessionService {
     return { ...session.confirmedEntities };
   }
 
+  updateConfirmedEntities(sessionId: string, entities: Record<string, string>): Record<string, string> {
+    const session = this.getOrCreate(sessionId);
+    Object.entries(entities).forEach(([key, value]) => {
+      if (!value) {
+        return;
+      }
+      session.confirmedEntities[key] = value;
+    });
+    this.refresh(session);
+    logger.debug('SessionService: updated confirmed entities', {
+      sessionId,
+      keys: Object.keys(entities),
+      total: Object.keys(session.confirmedEntities).length,
+    });
+    return { ...session.confirmedEntities };
+  }
+
   getConfirmedEntities(sessionId: string): Record<string, string> {
     const session = this.getSession(sessionId);
     return session ? { ...session.confirmedEntities } : {};

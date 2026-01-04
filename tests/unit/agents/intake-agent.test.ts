@@ -250,7 +250,7 @@ describe('IntakeAgent', () => {
     expect(response.type).toBe('summary_ready');
     expect(response.confirmedEntities).toMatchObject({
       person_name: '老刘',
-      gesture: '竖中指',
+      gesture: '中指',
       speech_content: '傻瓜蛋',
       tts_voice: 'a',
     });
