@@ -122,6 +122,11 @@ export class WorkflowArchitect {
         workflow = this.extractWorkflow(response);
         workflow = this.normalizeWorkflow(workflow);
       } catch (error) {
+        const candidate = this.extractJsonCandidate(response);
+        logger.warn('WorkflowArchitect: workflow JSON parse failed', {
+          error: error instanceof Error ? error.message : 'LLM未返回有效的工作流JSON',
+          jsonSnippet: this.truncateForLog(candidate ?? response, 2000),
+        });
         const repaired = await this.repairWorkflowJson(response, sessionId);
         if (repaired) {
           workflow = repaired;
@@ -407,9 +412,20 @@ export class WorkflowArchitect {
     } catch (error) {
       logger.warn('WorkflowArchitect: JSON repair failed', {
         error: error instanceof Error ? error.message : 'unknown error',
+        jsonSnippet: this.truncateForLog(candidate ?? response, 2000),
       });
       return null;
     }
+  }
+
+  private truncateForLog(value: string, maxLength: number): string {
+    if (!value) {
+      return '';
+    }
+    if (value.length <= maxLength) {
+      return value;
+    }
+    return `${value.slice(0, maxLength)}... [truncated ${value.length - maxLength} chars]`;
   }
 
   private normalizeWorkflow(workflow: WorkflowDefinition): WorkflowDefinition {
