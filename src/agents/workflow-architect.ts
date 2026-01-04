@@ -447,7 +447,7 @@ export class WorkflowArchitect {
     const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
     const idToName = new Map<string, string>();
     nodes.forEach((node) => {
-      if (node?.id && node?.name) {
+      if (typeof node?.id === 'string' && typeof node?.name === 'string') {
         idToName.set(node.id, node.name);
       }
     });
