@@ -122,10 +122,15 @@ export class WorkflowArchitect {
         workflow = this.extractWorkflow(response);
         workflow = this.normalizeWorkflow(workflow);
       } catch (error) {
-        lastErrors = [
-          error instanceof Error ? error.message : 'LLM未返回有效的工作流JSON',
-        ];
-        continue;
+        const repaired = await this.repairWorkflowJson(response, sessionId);
+        if (repaired) {
+          workflow = repaired;
+        } else {
+          lastErrors = [
+            error instanceof Error ? error.message : 'LLM未返回有效的工作流JSON',
+          ];
+          continue;
+        }
       }
 
       this.agentLogger.logWorkflowGenerated({
@@ -360,6 +365,41 @@ export class WorkflowArchitect {
       repaired += '}'.repeat(openCurly - closeCurly);
     }
     return repaired;
+  }
+
+  private async repairWorkflowJson(
+    response: string,
+    sessionId: string
+  ): Promise<WorkflowDefinition | null> {
+    const repairSystemPrompt = `
+你是一个JSON修复工具。请将输入中的工作流JSON修复为严格有效的JSON。
+要求：
+1. 只输出JSON本体，不要解释、不要markdown代码块。
+2. 保留原意，不要添加新字段。
+3. 确保JSON可以被JSON.parse解析。
+`.trim();
+    const repairUserMessage = `修复以下JSON并仅输出修复后的JSON：\n${response}`;
+    const repairResponse = await this.callLLM([
+      { role: 'system', content: repairSystemPrompt },
+      { role: 'user', content: repairUserMessage },
+    ]);
+    this.agentLogger.logLLMCall({
+      sessionId,
+      phase: 'generating',
+      systemPrompt: repairSystemPrompt,
+      userMessage: repairUserMessage,
+      response: repairResponse,
+    });
+
+    try {
+      const repaired = this.extractWorkflow(repairResponse);
+      return this.normalizeWorkflow(repaired);
+    } catch (error) {
+      logger.warn('WorkflowArchitect: JSON repair failed', {
+        error: error instanceof Error ? error.message : 'unknown error',
+      });
+      return null;
+    }
   }
 
   private normalizeWorkflow(workflow: WorkflowDefinition): WorkflowDefinition {

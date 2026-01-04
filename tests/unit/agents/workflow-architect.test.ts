@@ -234,6 +234,55 @@ describe('WorkflowArchitect', () => {
     expect(result.workflow?.name).toBe('Truncated');
   });
 
+  it('uses LLM repair when JSON is invalid', async () => {
+    const invalidJson = '{ "name": "Broken" "nodes": [], "connections": {} }';
+    const repairedJson = JSON.stringify({ name: 'Fixed', nodes: [], connections: {} }, null, 2);
+    const llmClient = {
+      chat: vi
+        .fn()
+        .mockResolvedValueOnce(
+          ['Reasoning: 测试。', '```json', invalidJson, '```'].join('\n')
+        )
+        .mockResolvedValueOnce(repairedJson),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockResolvedValue({
+        isValid: true,
+        errors: [],
+        warnings: [],
+        suggestions: [],
+        statistics: {
+          totalNodes: 0,
+          enabledNodes: 0,
+          triggerNodes: 0,
+          validConnections: 0,
+          invalidConnections: 0,
+          expressionsValidated: 0,
+        },
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.workflow?.name).toBe('Fixed');
+    expect(llmClient.chat).toHaveBeenCalledTimes(2);
+  });
+
   it('assigns unique node ids when missing or duplicated', async () => {
     const workflowWithMissingIds = {
       name: 'Missing IDs',
