@@ -2,11 +2,13 @@ import { MCPClient } from './mcp-client';
 import { LLMClient, ChatMessage } from './llm-client';
 import { HardwareComponent } from './hardware-components';
 import { WorkflowDefinition, ConversationTurn } from './types';
+import { AgentLogger, ValidationSummary } from './agent-logger';
 import { buildArchitectSystemPrompt } from './prompts/architect-system';
 import { selectPromptVariant } from './prompts/prompt-variants';
 import { SimpleCache } from '../utils/simple-cache';
 import { logger } from '../utils/logger';
 import { ALLOWED_NODE_TYPES } from './allowed-node-types';
+import type { ValidationResult } from './mcp-client';
 
 export interface WorkflowRequest {
   sessionId?: string;
@@ -55,6 +57,7 @@ export class WorkflowArchitect {
   private cache: SimpleCache;
   private nodeContextCache: SimpleCache;
   private promptVariant?: string;
+  private agentLogger = new AgentLogger();
 
   constructor(
     private llmClient: LLMClient,
@@ -79,6 +82,7 @@ export class WorkflowArchitect {
       return cached as WorkflowResult;
     }
 
+    const sessionId = request.sessionId ?? 'unknown';
     const nodeContext = await this.buildNodeContext(request.hardwareComponents);
     const toolDescriptions = [
       'search_nodes: 搜索n8n节点',
@@ -104,6 +108,13 @@ export class WorkflowArchitect {
     for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
       const messages = this.buildMessages(request.conversationHistory, systemPrompt, userMessage, lastErrors);
       const response = await this.callLLM(messages);
+      this.agentLogger.logLLMCall({
+        sessionId,
+        phase: 'generating',
+        systemPrompt,
+        userMessage,
+        response,
+      });
 
       reasoning = this.extractReasoning(response);
       try {
@@ -115,7 +126,20 @@ export class WorkflowArchitect {
         continue;
       }
 
+      this.agentLogger.logWorkflowGenerated({
+        sessionId,
+        attempt,
+        workflow,
+        reasoning,
+      });
+
       const validation = await this.mcpClient.validateWorkflow(workflow);
+      this.agentLogger.logValidationResult({
+        sessionId,
+        attempt,
+        stage: 'initial',
+        validationResult: this.summarizeValidation(validation),
+      });
       if (validation.isValid) {
         const result: WorkflowResult = {
           success: true,
@@ -130,6 +154,12 @@ export class WorkflowArchitect {
 
       const fixed = await this.mcpClient.autofixWorkflow(workflow);
       const fixedValidation = await this.mcpClient.validateWorkflow(fixed);
+      this.agentLogger.logValidationResult({
+        sessionId,
+        attempt,
+        stage: 'autofix',
+        validationResult: this.summarizeValidation(fixedValidation),
+      });
       if (fixedValidation.isValid) {
         const result: WorkflowResult = {
           success: true,
@@ -276,6 +306,24 @@ export class WorkflowArchitect {
     }
 
     return parsed;
+  }
+
+  private summarizeValidation(validation: ValidationResult): ValidationSummary {
+    return {
+      isValid: validation.isValid,
+      errors: validation.errors.map((error) => ({
+        message: error.message,
+        code: error.code,
+        nodeName: error.nodeName,
+        nodeId: error.nodeId,
+      })),
+      warnings: validation.warnings.map((warning) => ({
+        message: warning.message,
+        code: warning.code,
+        nodeName: warning.nodeName,
+        nodeId: warning.nodeId,
+      })),
+    };
   }
 
 }

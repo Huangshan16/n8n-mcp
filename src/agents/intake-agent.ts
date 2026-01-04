@@ -5,11 +5,13 @@ import { HardwareService } from './hardware-service';
 import { SessionService } from './session-service';
 import { AgentResponse, ConversationTurn, Intent, WorkflowBlueprint } from './types';
 import { HardwareComponent } from './hardware-components';
+import { AgentLogger } from './agent-logger';
 import { logger } from '../utils/logger';
 
 export class IntakeAgent {
   private static readonly SUMMARY_CADENCE = 3;
   private static readonly CONFIRM_MAX_ATTEMPTS = 3;
+  private agentLogger = new AgentLogger();
 
   constructor(
     private config: AgentConfig,
@@ -22,9 +24,19 @@ export class IntakeAgent {
 
   async processUserInput(userMessage: string, sessionId: string): Promise<AgentResponse> {
     logger.debug('IntakeAgent: processing message', { sessionId, messageLength: userMessage.length });
-    this.sessionService.appendTurn(sessionId, 'user', userMessage);
-    const session = this.sessionService.getOrCreate(sessionId);
+    const session = this.sessionService.appendTurn(sessionId, 'user', userMessage);
+    this.agentLogger.logUserInput({
+      sessionId: session.id,
+      phase: session.phase,
+      turnCount: session.userTurns,
+      message: userMessage,
+    });
     if (session.phase !== 'understanding') {
+      this.agentLogger.logPhaseChange({
+        sessionId: session.id,
+        from: session.phase,
+        to: 'understanding',
+      });
       this.sessionService.setPhase(sessionId, 'understanding');
     }
     const history = this.sessionService.getHistory(sessionId);
@@ -62,6 +74,13 @@ export class IntakeAgent {
     if (shouldSummarize || missingInfo.length === 0) {
       const summary = this.generateSummary(confirmedEntities, blueprint, missingInfo);
       this.sessionService.setWorkflowSummary(sessionId, summary);
+      this.agentLogger.logSummaryGeneration({
+        sessionId: session.id,
+        turnCount: this.sessionService.getUserTurnCount(sessionId),
+        confirmedEntities,
+        missingInfo,
+        summary,
+      });
       const response: AgentResponse = {
         type: 'summary_ready',
         message: summary,
@@ -117,6 +136,14 @@ export class IntakeAgent {
       return response;
     }
 
+    const previousPhase = session.phase;
+    if (previousPhase !== 'generating') {
+      this.agentLogger.logPhaseChange({
+        sessionId: session.id,
+        from: previousPhase,
+        to: 'generating',
+      });
+    }
     this.sessionService.setPhase(sessionId, 'generating');
     const effectiveIntent: Intent = { ...intent, entities: confirmedEntities };
     const hardwareComponents = this.resolveHardwareComponents(effectiveIntent);
@@ -147,6 +174,11 @@ export class IntakeAgent {
         this.sessionService.setWorkflow(sessionId, result.workflow);
         this.sessionService.setConfirmed(sessionId, true);
         this.sessionService.setPhase(sessionId, 'deploying');
+        this.agentLogger.logPhaseChange({
+          sessionId: session.id,
+          from: 'generating',
+          to: 'deploying',
+        });
         const response: AgentResponse = {
           type: 'workflow_ready',
           message: `工作流已生成，共${result.workflow.nodes.length}个节点，可继续创建。`,
@@ -166,6 +198,11 @@ export class IntakeAgent {
         const missingFields = this.extractMissingFieldsFromError(lastError);
         if (missingFields.length > 0 && attempt < IntakeAgent.CONFIRM_MAX_ATTEMPTS) {
           this.sessionService.setPhase(sessionId, 'understanding');
+          this.agentLogger.logPhaseChange({
+            sessionId: session.id,
+            from: 'generating',
+            to: 'understanding',
+          });
           const response: AgentResponse = {
             type: 'guidance',
             message: `工作流生成遇到问题，还需要确认：${missingFields.map((field) => this.humanizeField(field)).join('、')}`,
@@ -181,6 +218,11 @@ export class IntakeAgent {
       message: `工作流校验失败：${lastError}。请补充说明后再试。`,
     };
     this.sessionService.setPhase(sessionId, 'understanding');
+    this.agentLogger.logPhaseChange({
+      sessionId: session.id,
+      from: 'generating',
+      to: 'understanding',
+    });
     this.sessionService.appendTurn(sessionId, 'assistant', response.message);
     return response;
   }
