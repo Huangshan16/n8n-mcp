@@ -30,7 +30,9 @@ export class SessionService {
     const id = sessionId || randomUUID();
     const session: AgentSession = {
       id,
+      phase: 'understanding',
       history: [],
+      confirmedEntities: {},
       confirmed: false,
       userTurns: 0,
       lastSummaryTurn: 0,
@@ -108,6 +110,18 @@ export class SessionService {
     logger.debug('SessionService: cleared workflow', { sessionId });
   }
 
+  setPhase(sessionId: string, phase: AgentSession['phase']): void {
+    const session = this.getOrCreate(sessionId);
+    session.phase = phase;
+    this.refresh(session);
+    logger.debug('SessionService: updated phase', { sessionId, phase });
+  }
+
+  getPhase(sessionId: string): AgentSession['phase'] | null {
+    const session = this.getSession(sessionId);
+    return session?.phase ?? null;
+  }
+
   setIntent(sessionId: string, intent: AgentSession['intent']): void {
     const session = this.getOrCreate(sessionId);
     session.intent = intent;
@@ -128,6 +142,40 @@ export class SessionService {
     session.intent = undefined;
     this.refresh(session);
     logger.debug('SessionService: cleared intent', { sessionId });
+  }
+
+  mergeConfirmedEntities(sessionId: string, entities: Record<string, string>): Record<string, string> {
+    const session = this.getOrCreate(sessionId);
+    Object.entries(entities).forEach(([key, value]) => {
+      if (!value) {
+        return;
+      }
+      if (!session.confirmedEntities[key]) {
+        session.confirmedEntities[key] = value;
+      }
+    });
+    this.refresh(session);
+    logger.debug('SessionService: merged confirmed entities', {
+      sessionId,
+      keys: Object.keys(entities),
+      total: Object.keys(session.confirmedEntities).length,
+    });
+    return { ...session.confirmedEntities };
+  }
+
+  getConfirmedEntities(sessionId: string): Record<string, string> {
+    const session = this.getSession(sessionId);
+    return session ? { ...session.confirmedEntities } : {};
+  }
+
+  clearConfirmedEntities(sessionId: string): void {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return;
+    }
+    session.confirmedEntities = {};
+    this.refresh(session);
+    logger.debug('SessionService: cleared confirmed entities', { sessionId });
   }
 
   setBlueprint(sessionId: string, blueprint: AgentSession['blueprint']): void {
@@ -152,6 +200,18 @@ export class SessionService {
     logger.debug('SessionService: cleared blueprint', { sessionId });
   }
 
+  setWorkflowSummary(sessionId: string, summary: string | undefined): void {
+    const session = this.getOrCreate(sessionId);
+    session.workflowSummary = summary;
+    this.refresh(session);
+    logger.debug('SessionService: stored workflow summary', { sessionId, length: summary?.length ?? 0 });
+  }
+
+  getWorkflowSummary(sessionId: string): string | null {
+    const session = this.getSession(sessionId);
+    return session?.workflowSummary ?? null;
+  }
+
   setConfirmed(sessionId: string, confirmed: boolean): void {
     const session = this.getOrCreate(sessionId);
     session.confirmed = confirmed;
@@ -162,6 +222,28 @@ export class SessionService {
   isConfirmed(sessionId: string): boolean {
     const session = this.getSession(sessionId);
     return session?.confirmed ?? false;
+  }
+
+  resetSession(sessionId: string): void {
+    const now = new Date().toISOString();
+    const session: AgentSession = {
+      id: sessionId,
+      phase: 'understanding',
+      history: [],
+      workflow: undefined,
+      blueprint: undefined,
+      intent: undefined,
+      confirmedEntities: {},
+      workflowSummary: undefined,
+      confirmed: false,
+      userTurns: 0,
+      lastSummaryTurn: 0,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: this.getExpiryIso(),
+    };
+    this.sessions.set(sessionId, session);
+    logger.info('SessionService: session reset', { sessionId });
   }
 
   getSession(sessionId: string): AgentSession | null {

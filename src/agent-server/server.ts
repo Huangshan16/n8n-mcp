@@ -95,7 +95,8 @@ export class AgentHttpServer {
     this.server = http.createServer(app);
     attachWebSocketServer(this.server, this.agentService);
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      this.server?.once('error', reject);
       this.server?.listen(port, host, () => resolve());
     });
 

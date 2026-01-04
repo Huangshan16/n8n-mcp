@@ -4,6 +4,8 @@ export type IntentCategory =
   | 'game_interaction'
   | 'custom';
 
+export type AgentPhase = 'understanding' | 'generating' | 'deploying';
+
 export interface Intent {
   category: IntentCategory;
   entities: Record<string, string>;
@@ -36,6 +38,12 @@ export type AgentResponse =
       type: 'summary_ready';
       message: string;
       blueprint: WorkflowBlueprint;
+      confirmedEntities?: Record<string, string>;
+      missingInfo?: string[];
+      metadata?: {
+        showContinueButton: boolean;
+        showConfirmBuildButton: boolean;
+      };
     }
   | {
       type: 'workflow_ready';
@@ -60,10 +68,13 @@ export interface ConversationTurn {
 
 export interface AgentSession {
   id: string;
+  phase: AgentPhase;
   history: ConversationTurn[];
   workflow?: WorkflowDefinition;
   blueprint?: WorkflowBlueprint;
   intent?: Intent;
+  confirmedEntities: Record<string, string>;
+  workflowSummary?: string;
   confirmed: boolean;
   userTurns: number;
   lastSummaryTurn: number;

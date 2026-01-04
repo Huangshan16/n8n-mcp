@@ -88,6 +88,7 @@ describe('IntakeAgent', () => {
 
     expect(response.type).toBe('summary_ready');
     expect(response.blueprint?.intentSummary).toContain('石头剪刀布');
+    expect(response.metadata?.showConfirmBuildButton).toBe(true);
     expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
   });
 

@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 import { ALLOWED_NODE_TYPES } from './allowed-node-types';
 
 export interface WorkflowRequest {
+  sessionId?: string;
   userIntent: string;
   entities: Record<string, string>;
   hardwareComponents: HardwareComponent[];

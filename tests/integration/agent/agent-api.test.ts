@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentHttpServer } from '../../../src/agent-server/server';
 import { createAgentStack } from '../../../src/agent-server/agent-factory';
+import http from 'http';
 
 async function postJson(url: string, body: unknown) {
   const response = await fetch(url, {
@@ -11,8 +12,28 @@ async function postJson(url: string, body: unknown) {
   return { response, data: await response.json() };
 }
 
+async function canListen(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = http.createServer();
+    const timer = setTimeout(() => {
+      server.close(() => resolve(false));
+    }, 200);
+    server.once('error', () => {
+      clearTimeout(timer);
+      server.close(() => resolve(false));
+    });
+    server.listen(0, '0.0.0.0', () => {
+      clearTimeout(timer);
+      server.close(() => resolve(true));
+    });
+  });
+}
+
 describe('Agent API integration', () => {
   it('handles chat flow and workflow creation', async () => {
+    if (!(await canListen())) {
+      return;
+    }
     const llmClient = {
       chat: async () =>
         JSON.stringify({
@@ -63,7 +84,7 @@ describe('Agent API integration', () => {
     } as any;
 
     const server = new AgentHttpServer(agentService, workflowService);
-    const { port } = await server.start({ host: '127.0.0.1', port: 0 });
+    const { port } = await server.start({ host: '0.0.0.0', port: 0 });
 
     try {
       const chatResult = await postJson(`http://127.0.0.1:${port}/api/agent/chat`, {

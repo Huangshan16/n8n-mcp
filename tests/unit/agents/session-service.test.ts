@@ -21,6 +21,7 @@ describe('SessionService', () => {
 
     service.setIntent(session.id, intent);
     expect(service.getIntent(session.id)).toEqual(intent);
+    expect(service.getPhase(session.id)).toBe('understanding');
     expect(service.isConfirmed(session.id)).toBe(false);
 
     service.setConfirmed(session.id, true);
@@ -28,6 +29,33 @@ describe('SessionService', () => {
 
     service.clearIntent(session.id);
     expect(service.getIntent(session.id)).toBeNull();
+  });
+
+  it('merges confirmed entities without overwriting', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+
+    service.mergeConfirmedEntities(session.id, { person_name: '老刘', gesture: '中指' });
+    const merged = service.mergeConfirmedEntities(session.id, { gesture: '比V', tts_voice: 'a' });
+
+    expect(merged.person_name).toBe('老刘');
+    expect(merged.gesture).toBe('中指');
+    expect(merged.tts_voice).toBe('a');
+  });
+
+  it('resets session state', () => {
+    const service = new SessionService();
+    const session = service.getOrCreate();
+    service.appendTurn(session.id, 'user', 'hello');
+    service.setPhase(session.id, 'generating');
+    service.mergeConfirmedEntities(session.id, { person_name: '老刘' });
+
+    service.resetSession(session.id);
+    const resetSession = service.getSession(session.id);
+
+    expect(resetSession?.phase).toBe('understanding');
+    expect(resetSession?.history.length).toBe(0);
+    expect(resetSession?.confirmedEntities).toEqual({});
   });
 
   it('stores and retrieves blueprint in session', () => {
