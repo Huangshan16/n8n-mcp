@@ -24,8 +24,9 @@ By default the server listens on `http://localhost:3005` and exposes:
 
 ```bash
 cd apps/agent-ui
-npm install
 npm run dev
+
+npm install
 ```
 
 ### UI Environment Variables

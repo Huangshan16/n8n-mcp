@@ -141,3 +141,4 @@ n8n-mcp-wrapper.sh
 # Telemetry configuration (user-specific)
 ~/.n8n-mcp/
 .env copy
+docs/frp_tools/

@@ -1,0 +1,1 @@
+./frp_tools/frpc -c frp_tools/frpc.toml
