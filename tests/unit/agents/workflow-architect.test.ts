@@ -233,4 +233,61 @@ describe('WorkflowArchitect', () => {
     expect(result.success).toBe(true);
     expect(result.workflow?.name).toBe('Truncated');
   });
+
+  it('assigns unique node ids when missing or duplicated', async () => {
+    const workflowWithMissingIds = {
+      name: 'Missing IDs',
+      nodes: [
+        { name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], parameters: {} },
+        { name: 'If', type: 'n8n-nodes-base.if', typeVersion: 2.3, position: [200, 0], parameters: { conditions: { combinator: 'and', conditions: [] } } },
+        { id: 'dup', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [400, 0], parameters: {} },
+        { id: 'dup', name: 'HTTP', type: 'n8n-nodes-base.httpRequest', typeVersion: 4, position: [600, 0], parameters: {} },
+      ],
+      connections: {},
+    };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        ['Reasoning: 测试。', '```json', JSON.stringify(workflowWithMissingIds, null, 2), '```'].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockImplementation(async (workflow: any) => {
+        const ids = workflow.nodes.map((node: any) => node.id);
+        expect(ids.filter((id: string) => !id)).toHaveLength(0);
+        expect(new Set(ids).size).toBe(ids.length);
+        return {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          suggestions: [],
+          statistics: {
+            totalNodes: workflow.nodes.length,
+            enabledNodes: workflow.nodes.length,
+            triggerNodes: 1,
+            validConnections: 0,
+            invalidConnections: 0,
+            expressionsValidated: 0,
+          },
+        };
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

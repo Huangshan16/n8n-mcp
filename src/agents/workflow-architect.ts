@@ -366,6 +366,7 @@ export class WorkflowArchitect {
     if (!Array.isArray(workflow.nodes)) {
       return workflow;
     }
+    this.ensureNodeIds(workflow.nodes);
     workflow.nodes.forEach((node) => {
       if (node?.type !== 'n8n-nodes-base.if') {
         return;
@@ -387,6 +388,21 @@ export class WorkflowArchitect {
       }
     });
     return workflow;
+  }
+
+  private ensureNodeIds(nodes: Array<Record<string, any>>): void {
+    const seen = new Set<string>();
+    nodes.forEach((node) => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      let id = typeof node.id === 'string' ? node.id : '';
+      if (!id || seen.has(id)) {
+        id = randomUUID();
+        node.id = id;
+      }
+      seen.add(id);
+    });
   }
 
   private convertLegacyIfConditions(conditions: any, combineOperation?: string): {
