@@ -67,6 +67,34 @@ export class AgentHttpServer {
       }
     });
 
+    app.post('/api/agent/confirm-build', async (req, res) => {
+      const sessionId = req.body?.sessionId as string | undefined;
+      if (!sessionId) {
+        res.status(400).json({ error: 'sessionId is required' });
+        return;
+      }
+
+      try {
+        logger.debug('HTTP confirm-build request', { sessionId });
+        const result = await this.agentService.confirm(sessionId);
+        res.json(result);
+      } catch (error) {
+        logger.warn('HTTP confirm-build error', error);
+        res.status(500).json({ error: error instanceof Error ? error.message : 'Agent error' });
+      }
+    });
+
+    app.post('/api/agent/reset-session', async (req, res) => {
+      const sessionId = req.body?.sessionId as string | undefined;
+      if (!sessionId) {
+        res.status(400).json({ error: 'sessionId is required' });
+        return;
+      }
+
+      this.agentService.resetSession(sessionId);
+      res.json({ success: true });
+    });
+
     app.post('/api/workflow/create', async (req, res) => {
       try {
         const workflow = req.body?.workflow as Record<string, unknown> | undefined;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ChatMessage, ConnectionStatus } from '../hooks/useAgentChat';
+import type { ChatMessage, ConnectionStatus, BuildStatus } from '../hooks/useAgentChat';
 import type { WorkflowDefinition } from '../lib/agentApi';
+import { BuildProgressBar } from './BuildProgressBar';
 
 const QUICK_PROMPTS = [
   '见到老刘竖个中指骂人',
@@ -32,6 +33,7 @@ interface ChatInterfaceProps {
   onSend: (message: string) => void;
   onCreateWorkflow: (workflow: WorkflowDefinition) => Promise<unknown>;
   onConfirmWorkflow: () => Promise<void>;
+  buildStatus: BuildStatus;
   status: ConnectionStatus;
   isBusy: boolean;
 }
@@ -41,6 +43,7 @@ export function ChatInterface({
   onSend,
   onCreateWorkflow,
   onConfirmWorkflow,
+  buildStatus,
   status,
   isBusy,
 }: ChatInterfaceProps) {
@@ -90,6 +93,9 @@ export function ChatInterface({
       </div>
 
       <div ref={listRef} className="scrollbar-none relative z-10 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        {buildStatus > 0 ? (
+          <BuildProgressBar status={buildStatus} />
+        ) : null}
         {messages.length === 0 ? (
           <div className="space-y-4 text-sm text-cyan-100/70">
             <p className="mono text-xs uppercase tracking-[0.3em] text-cyan-400/60">Waiting for input</p>
@@ -134,26 +140,31 @@ export function ChatInterface({
                 ) : null}
                 {message.responseType === 'summary_ready' && !dismissedSummaries[message.id] ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDismissedSummaries((prev) => ({
-                          ...prev,
-                          [message.id]: true,
-                        }))
-                      }
-                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-black/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-200/80 transition hover:border-cyan-200/60"
-                    >
-                      继续交流
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onConfirmWorkflow}
-                      disabled={isBusy}
-                      className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      确认构建
-                    </button>
+                    {message.metadata?.showContinueButton !== false ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDismissedSummaries((prev) => ({
+                            ...prev,
+                            [message.id]: true,
+                          }))
+                        }
+                        className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-black/30 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-200/80 transition hover:border-cyan-200/60"
+                      >
+                        继续交流
+                      </button>
+                    ) : null}
+                    {(message.metadata?.showConfirmBuildButton ??
+                      (message.blueprint?.missingFields?.length === 0)) ? (
+                      <button
+                        type="button"
+                        onClick={onConfirmWorkflow}
+                        disabled={isBusy}
+                        className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-100 transition hover:border-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        确认构建
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
                 {message.workflow ? (

@@ -33,4 +33,17 @@ describe('AgentService', () => {
     expect(result.sessionId).toBe(session.id);
     expect(result.response.type).toBe('workflow_ready');
   });
+
+  it('resets session', () => {
+    const intakeAgent = { processUserInput: vi.fn() };
+    const sessionService = new SessionService();
+    const session = sessionService.getOrCreate();
+    const service = new AgentService(intakeAgent as any, sessionService);
+
+    sessionService.appendTurn(session.id, 'user', 'hello');
+    service.resetSession(session.id);
+
+    const resetSession = sessionService.getSession(session.id);
+    expect(resetSession?.history.length).toBe(0);
+  });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   confirmAgentWorkflow,
   createWorkflow as createWorkflowApi,
+  resetAgentSession,
   sendAgentMessage,
 } from '../lib/agentApi';
 import type { WorkflowCreateResult, WorkflowDefinition, AgentResponse, WorkflowBlueprint } from '../lib/agentApi';
@@ -16,14 +17,17 @@ export interface ChatMessage {
   blueprint?: WorkflowBlueprint;
   reasoning?: string;
   metadata?: {
-    iterations: number;
-    nodeCount: number;
+    iterations?: number;
+    nodeCount?: number;
+    showContinueButton?: boolean;
+    showConfirmBuildButton?: boolean;
   };
   variant?: 'error' | 'normal';
   responseType?: AgentResponse['type'];
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
+export type BuildStatus = 0 | 1 | 2 | 3;
 
 const WS_URL = import.meta.env.VITE_AGENT_WS_URL || 'ws://localhost:3005/ws';
 
@@ -32,6 +36,7 @@ export function useAgentChat() {
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [isBusy, setIsBusy] = useState(false);
+  const [buildStatus, setBuildStatus] = useState<BuildStatus>(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
@@ -48,6 +53,16 @@ export function useAgentChat() {
     const response = payload?.response as AgentResponse | undefined;
     if (!response?.message) {
       return;
+    }
+
+    if (response.type === 'workflow_ready') {
+      setBuildStatus(2);
+    }
+    if (response.type === 'guidance' || response.type === 'summary_ready') {
+      setBuildStatus(0);
+    }
+    if (response.type === 'error') {
+      setBuildStatus(0);
     }
 
     appendMessage({
@@ -159,7 +174,11 @@ export function useAgentChat() {
   );
 
   const createWorkflow = useCallback(
-    async (workflow: WorkflowDefinition): Promise<WorkflowCreateResult> => createWorkflowApi(workflow, sessionId),
+    async (workflow: WorkflowDefinition): Promise<WorkflowCreateResult> => {
+      const result = await createWorkflowApi(workflow, sessionId);
+      setBuildStatus(3);
+      return result;
+    },
     [sessionId]
   );
 
@@ -167,6 +186,7 @@ export function useAgentChat() {
     if (!sessionId) {
       return;
     }
+    setBuildStatus(1);
     setIsBusy(true);
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -188,6 +208,15 @@ export function useAgentChat() {
     }
   }, [handleAgentResponse, sessionId]);
 
+  const restartConversation = useCallback(async () => {
+    if (sessionId) {
+      await resetAgentSession(sessionId).catch(() => undefined);
+    }
+    setMessages([]);
+    setBuildStatus(0);
+    setSessionId(undefined);
+  }, [sessionId]);
+
   return {
     messages,
     status,
@@ -195,5 +224,7 @@ export function useAgentChat() {
     sendMessage,
     createWorkflow,
     confirmWorkflow,
+    restartConversation,
+    buildStatus,
   };
 }

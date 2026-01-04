@@ -20,11 +20,15 @@ export interface AgentResponse {
   type: 'guidance' | 'summary_ready' | 'workflow_ready' | 'error';
   message: string;
   blueprint?: WorkflowBlueprint;
+  confirmedEntities?: Record<string, string>;
+  missingInfo?: string[];
   workflow?: WorkflowDefinition;
   reasoning?: string;
   metadata?: {
-    iterations: number;
-    nodeCount: number;
+    iterations?: number;
+    nodeCount?: number;
+    showContinueButton?: boolean;
+    showConfirmBuildButton?: boolean;
   };
   details?: unknown;
 }
@@ -60,7 +64,11 @@ export async function sendAgentMessage(message: string, sessionId?: string): Pro
 }
 
 export async function confirmAgentWorkflow(sessionId: string): Promise<AgentChatResponse> {
-  return postJson<AgentChatResponse>('/api/agent/confirm', { sessionId });
+  return postJson<AgentChatResponse>('/api/agent/confirm-build', { sessionId });
+}
+
+export async function resetAgentSession(sessionId: string): Promise<{ success: boolean }> {
+  return postJson<{ success: boolean }>('/api/agent/reset-session', { sessionId });
 }
 
 export async function createWorkflow(

@@ -41,4 +41,8 @@ export class AgentService {
   getWorkflow(sessionId: string) {
     return this.sessionService.getWorkflow(sessionId);
   }
+
+  resetSession(sessionId: string) {
+    this.sessionService.resetSession(sessionId);
+  }
 }

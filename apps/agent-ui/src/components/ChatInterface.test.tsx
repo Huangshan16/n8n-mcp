@@ -26,6 +26,7 @@ describe('ChatInterface', () => {
         onSend={() => undefined}
         onCreateWorkflow={onCreateWorkflow}
         onConfirmWorkflow={onConfirmWorkflow}
+        buildStatus={0}
         status="open"
         isBusy={false}
       />
@@ -62,6 +63,7 @@ describe('ChatInterface', () => {
         onSend={() => undefined}
         onCreateWorkflow={vi.fn()}
         onConfirmWorkflow={onConfirmWorkflow}
+        buildStatus={0}
         status="open"
         isBusy={false}
       />

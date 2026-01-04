@@ -7,7 +7,7 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
   error: 'SIGNAL_ERROR',
 };
 
-export function Header({ status }: { status: ConnectionStatus }) {
+export function Header({ status, onRestart }: { status: ConnectionStatus; onRestart: () => void }) {
   const label = STATUS_LABELS[status];
   const dotColor =
     status === 'open' ? 'bg-emerald-400' : status === 'connecting' ? 'bg-cyan-400' : 'bg-rose-400';
@@ -26,6 +26,13 @@ export function Header({ status }: { status: ConnectionStatus }) {
 
       <div className="mono flex items-center gap-4 text-[10px] uppercase text-cyan-200/70">
         <span className="hidden md:inline">BUS_SPEED: 4.2GB/S</span>
+        <button
+          type="button"
+          onClick={onRestart}
+          className="rounded-full border border-cyan-400/30 px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-cyan-200/80 transition hover:border-cyan-200/70 hover:text-cyan-100"
+        >
+          重新开始
+        </button>
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${dotColor} pulse-dot`}></span>
           {label}
