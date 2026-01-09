@@ -26,6 +26,9 @@ By default the server listens on `http://localhost:3005` and exposes:
 cd apps/agent-ui
 npm run dev
 
+cd docs
+./web.sh
+
 npm install
 ```
 

@@ -506,4 +506,120 @@ describe('WorkflowArchitect', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('adds default connections when missing', async () => {
+    const workflow = {
+      name: 'Missing Connections',
+      nodes: [
+        {
+          id: 'node_webhook',
+          name: 'Webhook',
+          type: 'n8n-nodes-base.webhook',
+          typeVersion: 2.1,
+          position: [0, 0],
+          parameters: { path: 'test', httpMethod: 'POST' },
+        },
+        {
+          id: 'node_set',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: 3.4,
+          position: [200, 0],
+          parameters: {},
+        },
+      ],
+    };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        ['Reasoning: 测试。', '```json', JSON.stringify(workflow, null, 2), '```'].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2.1,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockImplementation(async (wf: any) => {
+        expect(wf.connections).toHaveProperty('Webhook');
+        expect(wf.connections.Webhook.main[0][0].node).toBe('Set');
+        return {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          suggestions: [],
+          statistics: {
+            totalNodes: wf.nodes.length,
+            enabledNodes: wf.nodes.length,
+            triggerNodes: 1,
+            validConnections: 1,
+            invalidConnections: 0,
+            expressionsValidated: 0,
+          },
+        };
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('extracts JSON from uppercase code fences and ignores leading text', async () => {
+    const workflow = { name: 'Fence Workflow', nodes: [], connections: {} };
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        [
+          '说明: {person_name, gesture}',
+          '```JSON\r',
+          JSON.stringify(workflow, null, 2),
+          '```',
+        ].join('\n')
+      ),
+    };
+    const mcpClient = {
+      searchNodes: vi.fn().mockResolvedValue({ nodes: [], total: 0 }),
+      getNode: vi.fn().mockResolvedValue({
+        nodeType: 'n8n-nodes-base.webhook',
+        displayName: 'Webhook',
+        defaultVersion: 2,
+        properties: [],
+      }),
+      validateWorkflow: vi.fn().mockResolvedValue({
+        isValid: true,
+        errors: [],
+        warnings: [],
+        suggestions: [],
+        statistics: {
+          totalNodes: 0,
+          enabledNodes: 0,
+          triggerNodes: 0,
+          validConnections: 0,
+          invalidConnections: 0,
+          expressionsValidated: 0,
+        },
+      }),
+      autofixWorkflow: vi.fn(),
+    } as any;
+
+    const architect = new WorkflowArchitect(llmClient as any, mcpClient);
+    const result = await architect.generateWorkflow({
+      userIntent: '测试',
+      entities: {},
+      hardwareComponents: [],
+      conversationHistory: [],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.workflow?.name).toBe('Fence Workflow');
+  });
 });

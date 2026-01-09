@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger, LogLevel } from '../src/utils/logger';
 
@@ -118,6 +121,22 @@ describe('Logger', () => {
       logger.info('test message', obj, 123);
       
       expect(consoleLogSpy).toHaveBeenCalledWith('[test] [INFO] test message', obj, 123);
+    });
+  });
+
+  describe('file logging', () => {
+    it('should write logs to a file when enabled', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logger-test-'));
+      const filePath = logger.enableFileLogging({ directory: tempDir, fileName: 'test.log' });
+
+      expect(filePath).not.toBeNull();
+
+      logger.info('file log message', { hello: 'world' });
+      await logger.closeFileLogging();
+
+      const content = fs.readFileSync(filePath as string, 'utf8');
+      expect(content).toContain('[test] [INFO] file log message');
+      expect(content).toContain('hello');
     });
   });
 

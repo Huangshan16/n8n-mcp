@@ -311,18 +311,24 @@ export class WorkflowArchitect {
   }
 
   private extractWorkflow(response: string): WorkflowDefinition {
-    const candidates: string[] = [];
-    const primary = this.extractJsonCandidate(response);
-    if (primary) {
-      candidates.push(primary);
+    const candidates = this.extractJsonCandidates(response);
+    if (candidates.length === 0) {
+      candidates.push(response);
     }
 
     const errors: string[] = [];
     for (const candidate of candidates) {
       try {
         const parsed = this.parseWorkflow(candidate);
-        if (!parsed?.name || !parsed?.nodes || !parsed?.connections) {
-          throw new Error('工作流JSON缺少name/nodes/connections');
+        if (!parsed?.nodes) {
+          throw new Error('工作流JSON缺少nodes');
+        }
+        if (!parsed.name) {
+          parsed.name = 'Generated Workflow';
+        }
+        if (!parsed.connections || typeof parsed.connections !== 'object') {
+          parsed.connections = {};
+          this.addDefaultConnections(parsed);
         }
         return parsed;
       } catch (error) {
@@ -333,18 +339,85 @@ export class WorkflowArchitect {
     throw new Error(errors[0] ?? 'LLM未返回有效的工作流JSON');
   }
 
-  private extractJsonCandidate(response: string): string | null {
-    const jsonBlock = response.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonBlock?.[1]) {
-      return jsonBlock[1];
-    }
-    const braceStart = response.indexOf('{');
-    if (braceStart >= 0) {
-      const braceEnd = response.lastIndexOf('}');
-      if (braceEnd > braceStart) {
-        return response.slice(braceStart, braceEnd + 1);
+  private extractJsonCandidates(response: string): string[] {
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    const fencePattern = /```(?:json)?\s*([\s\S]*?)```/gi;
+    let match: RegExpExecArray | null = null;
+    while ((match = fencePattern.exec(response)) !== null) {
+      const candidate = match[1]?.trim();
+      if (!candidate) {
+        continue;
       }
-      return response.slice(braceStart);
+      const extracted = candidate.startsWith('{')
+        ? candidate
+        : this.extractBalancedJson(candidate) ?? candidate;
+      if (!seen.has(extracted)) {
+        seen.add(extracted);
+        candidates.push(extracted);
+      }
+    }
+
+    const balanced = this.extractBalancedJson(response);
+    if (balanced && !seen.has(balanced)) {
+      seen.add(balanced);
+      candidates.push(balanced);
+    }
+    return candidates;
+  }
+
+  private extractJsonCandidate(response: string): string | null {
+    return this.extractJsonCandidates(response)[0] ?? null;
+  }
+
+  private extractBalancedJson(response: string): string | null {
+    let inString = false;
+    let escape = false;
+    let depth = 0;
+    let start = -1;
+
+    for (let index = 0; index < response.length; index += 1) {
+      const char = response[index];
+      if (inString) {
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (char === '\\') {
+          escape = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{') {
+        if (depth === 0) {
+          start = index;
+        }
+        depth += 1;
+        continue;
+      }
+
+      if (char === '}') {
+        if (depth > 0) {
+          depth -= 1;
+          if (depth === 0 && start >= 0) {
+            return response.slice(start, index + 1);
+          }
+        }
+      }
+    }
+
+    if (start >= 0) {
+      return response.slice(start);
     }
     return null;
   }
@@ -433,6 +506,10 @@ export class WorkflowArchitect {
       return workflow;
     }
     this.ensureNodeIds(workflow.nodes);
+    if (!workflow.connections || typeof workflow.connections !== 'object') {
+      workflow.connections = {};
+      this.addDefaultConnections(workflow);
+    }
     this.normalizeConnections(workflow);
     workflow.nodes.forEach((node) => {
       this.normalizeNode(node);
@@ -625,6 +702,40 @@ export class WorkflowArchitect {
       normalized[sourceName] = this.normalizeConnectionMapping(mapping, idToName);
     });
     workflow.connections = normalized as WorkflowDefinition['connections'];
+  }
+
+  private addDefaultConnections(workflow: WorkflowDefinition): void {
+    const nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+    if (nodes.length < 2) {
+      return;
+    }
+
+    const connections: Record<string, any> = workflow.connections ?? {};
+    for (let index = 0; index < nodes.length - 1; index += 1) {
+      const source = nodes[index];
+      const target = nodes[index + 1];
+      const sourceName = typeof source?.name === 'string' ? source.name : null;
+      const targetName = typeof target?.name === 'string' ? target.name : null;
+      if (!sourceName || !targetName) {
+        continue;
+      }
+
+      const entry = (connections[sourceName] ?? {}) as { main?: Array<any> };
+      if (source.type === 'n8n-nodes-base.if') {
+        const trueBranch = Array.isArray(entry.main?.[0]) ? entry.main![0] : [];
+        trueBranch.push({ node: targetName, type: 'main', index: 0 });
+        const falseBranch = Array.isArray(entry.main?.[1]) ? entry.main![1] : [];
+        entry.main = [trueBranch, falseBranch];
+      } else {
+        const main = Array.isArray(entry.main?.[0]) ? entry.main![0] : [];
+        main.push({ node: targetName, type: 'main', index: 0 });
+        entry.main = [main];
+      }
+
+      connections[sourceName] = entry;
+    }
+
+    workflow.connections = connections as WorkflowDefinition['connections'];
   }
 
   private normalizeConnectionMapping(mapping: unknown, idToName: Map<string, string>): unknown {
