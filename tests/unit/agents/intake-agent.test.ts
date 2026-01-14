@@ -39,7 +39,8 @@ describe('IntakeAgent', () => {
     const session = sessionService.getOrCreate();
     const response = await agent.processUserInput('见到老刘', session.id);
 
-    expect(response.type).toBe('guidance');
+    expect(response.type).toBe('select_single');
+    expect(response.interaction?.field).toBe('tts_voice');
     expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
   });
 
@@ -90,6 +91,50 @@ describe('IntakeAgent', () => {
     expect(response.blueprint?.intentSummary).toContain('石头剪刀布');
     expect(response.metadata?.showConfirmBuildButton).toBe(true);
     expect(workflowArchitect.generateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('returns single select interaction when tts voice is missing', async () => {
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          category: 'face_recognition_action',
+          entities: {
+            person_name: '老刘',
+            gesture: '中指',
+            speech_content: '傻瓜蛋',
+          },
+          confidence: 0.9,
+        })
+      ),
+    };
+    const workflowArchitect = { generateWorkflow: vi.fn() } as any;
+    const hardwareService = { inferComponentsFromIntent: vi.fn().mockReturnValue([]) } as any;
+    const sessionService = new SessionService();
+    const agent = new IntakeAgent(
+      {
+        llmProvider: 'openai',
+        llmModel: 'test',
+        llmApiKey: 'key',
+        maxConversationTurns: 4,
+        convergenceThreshold: 0.7,
+        llmTimeoutMs: 1000,
+        workflowCacheTtlSeconds: 300,
+        maxIterations: 2,
+        promptVariant: 'baseline',
+      },
+      llmClient as any,
+      workflowArchitect,
+      hardwareService,
+      sessionService,
+      []
+    );
+
+    const session = sessionService.getOrCreate();
+    const response = await agent.processUserInput('见到老刘竖中指骂人', session.id);
+
+    expect(response.type).toBe('select_single');
+    expect(response.interaction?.field).toBe('tts_voice');
+    expect(response.interaction?.mode).toBe('single');
   });
 
   it('retries workflow generation on confirm up to max attempts', async () => {
@@ -184,9 +229,8 @@ describe('IntakeAgent', () => {
     await agent.processUserInput('还是老刘', session.id);
     const response = await agent.processUserInput('继续', session.id);
 
-    expect(response.type).toBe('summary_ready');
-    expect(response.metadata?.showConfirmBuildButton).toBe(false);
-    expect(response.missingInfo).toContain('gesture');
+    expect(response.type).toBe('select_single');
+    expect(response.interaction?.field).toBe('tts_voice');
   });
 
   it('accumulates confirmed entities across turns', async () => {
@@ -296,7 +340,7 @@ describe('IntakeAgent', () => {
     const session = sessionService.getOrCreate();
     const response = await agent.processUserInput('见到老刘竖个中指骂人', session.id);
 
-    expect(response.type).toBe('guidance');
-    expect(response.message).toContain('语音');
+    expect(response.type).toBe('select_single');
+    expect(response.interaction?.field).toBe('tts_voice');
   });
 });

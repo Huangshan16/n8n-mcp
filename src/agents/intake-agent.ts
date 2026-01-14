@@ -3,7 +3,14 @@ import { LLMClient } from './llm-client';
 import { WorkflowArchitect } from './workflow-architect';
 import { HardwareService } from './hardware-service';
 import { SessionService } from './session-service';
-import { AgentResponse, ConversationTurn, Intent, WorkflowBlueprint } from './types';
+import { randomUUID } from 'node:crypto';
+import {
+  AgentResponse,
+  ConversationTurn,
+  Intent,
+  InteractionRequest,
+  WorkflowBlueprint,
+} from './types';
 import { HardwareComponent } from './hardware-components';
 import { AgentLogger } from './agent-logger';
 import { logger } from '../utils/logger';
@@ -82,6 +89,17 @@ export class IntakeAgent {
       missingInfo,
     });
 
+    if (missingInfo.length > 0) {
+      const interactionResponse = this.buildInteractionResponse(
+        missingInfo,
+        confirmedEntities
+      );
+      if (interactionResponse) {
+        this.sessionService.appendTurn(sessionId, 'assistant', interactionResponse.message);
+        return interactionResponse;
+      }
+    }
+
     const shouldSummarize = this.sessionService.shouldSummarize(
       sessionId,
       IntakeAgent.SUMMARY_CADENCE
@@ -126,6 +144,8 @@ export class IntakeAgent {
     const response: AgentResponse = {
       type: 'guidance',
       message: question,
+      confirmedEntities,
+      missingInfo,
     };
     this.sessionService.appendTurn(sessionId, 'assistant', response.message);
     return response;
@@ -146,6 +166,11 @@ export class IntakeAgent {
     const confirmedEntities = session.confirmedEntities;
     const missingInfo = this.getMissingInfo(intent.category, confirmedEntities, blueprint?.intentSummary ?? '');
     if (missingInfo.length > 0) {
+      const interactionResponse = this.buildInteractionResponse(missingInfo, confirmedEntities);
+      if (interactionResponse) {
+        this.sessionService.appendTurn(sessionId, 'assistant', interactionResponse.message);
+        return interactionResponse;
+      }
       const question = await this.generateGuidanceQuestion(intent.category, confirmedEntities, missingInfo);
       const response: AgentResponse = { type: 'guidance', message: question };
       this.sessionService.appendTurn(sessionId, 'assistant', response.message);
@@ -229,10 +254,12 @@ export class IntakeAgent {
       }
     }
 
-    const response: AgentResponse = {
-      type: 'guidance',
-      message: `工作流校验失败：${lastError}。请补充说明后再试。`,
-    };
+      const response: AgentResponse = {
+        type: 'guidance',
+        message: `工作流校验失败：${lastError}。请补充说明后再试。`,
+        confirmedEntities: session.confirmedEntities,
+        missingInfo: [],
+      };
     this.sessionService.setPhase(sessionId, 'understanding');
     this.agentLogger.logPhaseChange({
       sessionId: session.id,
@@ -376,6 +403,13 @@ ${hardwareLines}
       gesture: '动作手势',
       speech_content: '语音内容',
       tts_voice: '音色',
+      screen_emoji: '屏幕表情',
+      chassis_action: '底盘动作',
+      hand_gestures: '机械手手势',
+      yolo_gestures: '手势识别',
+      emotion_labels: '情绪分类',
+      arm_actions: '机械臂动作',
+      face_profiles: '人脸样本',
       emotion_mode: '情绪模式',
       game_type: '游戏类型',
       schedule_time: '触发时间',
@@ -470,6 +504,54 @@ ${hardwareLines}
       missingFields.add('schedule_time');
     }
 
+    if (this.hasAnyKeyword(message, ['语音', '音色', 'TTS', '音频'])) {
+      if (!confirmedEntities.tts_voice) {
+        missingFields.add('tts_voice');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['屏幕', 'emoji', '表情'])) {
+      if (!confirmedEntities.screen_emoji) {
+        missingFields.add('screen_emoji');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['底盘', '移动', '前进', '后退', '旋转'])) {
+      if (!confirmedEntities.chassis_action) {
+        missingFields.add('chassis_action');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['机械手', '手势执行', '做手势'])) {
+      if (!confirmedEntities.hand_gestures) {
+        missingFields.add('hand_gestures');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['yolo', 'yolov8', '手势识别'])) {
+      if (!confirmedEntities.yolo_gestures) {
+        missingFields.add('yolo_gestures');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['structbert', '情绪分类', '情绪识别'])) {
+      if (!confirmedEntities.emotion_labels) {
+        missingFields.add('emotion_labels');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['机械臂', '夹子', '钳子'])) {
+      if (!confirmedEntities.arm_actions) {
+        missingFields.add('arm_actions');
+      }
+    }
+
+    if (this.hasAnyKeyword(message, ['人脸识别', '人脸', '人脸图片', '照片', '头像'])) {
+      if (!confirmedEntities.face_profiles) {
+        missingFields.add('face_profiles');
+      }
+    }
+
     return Array.from(missingFields);
   }
 
@@ -479,6 +561,16 @@ ${hardwareLines}
     const voiceMatch = message.match(/音色\s*([abc])/i);
     if (voiceMatch?.[1]) {
       entities.tts_voice = voiceMatch[1].toLowerCase();
+    }
+
+    const emoji = this.findEmojiKeyword(message);
+    if (emoji && this.hasAnyKeyword(message, ['屏幕', 'emoji', '表情'])) {
+      entities.screen_emoji = emoji;
+    }
+
+    const chassisAction = this.findChassisAction(message);
+    if (chassisAction) {
+      entities.chassis_action = chassisAction;
     }
 
     const gesture = this.findGestureKeyword(message);
@@ -494,6 +586,31 @@ ${hardwareLines}
     const personMatch = message.match(/老[\u4e00-\u9fa5]{1,2}/);
     if (personMatch?.[0]) {
       entities.person_name = personMatch[0];
+    }
+
+    const handGestures = this.findMultiGestures(message, ['机械手', '手势执行', '做手势']);
+    if (handGestures.length > 0) {
+      entities.hand_gestures = handGestures.join(',');
+    }
+
+    const yoloGestures = this.findMultiGestures(message, ['yolo', 'yolov8', '手势识别']);
+    if (yoloGestures.length > 0) {
+      entities.yolo_gestures = yoloGestures.join(',');
+    }
+
+    const emotionLabels = this.findEmotionLabels(message);
+    if (emotionLabels.length > 0) {
+      entities.emotion_labels = emotionLabels.join(',');
+    }
+
+    const armActions = this.findArmActions(message);
+    if (armActions.length > 0) {
+      entities.arm_actions = armActions.join(',');
+    }
+
+    const faceProfiles = this.findFaceProfiles(message);
+    if (faceProfiles.length > 0) {
+      entities.face_profiles = faceProfiles.join(',');
     }
 
     const scheduleMatch = message.match(/(\d{1,2})[:点]\d{0,2}/);
@@ -635,11 +752,32 @@ ${hardwareLines}
     if (message.match(/音色\s*[abc]/i)) {
       keys.add('tts_voice');
     }
+    if (this.findEmojiKeyword(message)) {
+      keys.add('screen_emoji');
+    }
+    if (this.findChassisAction(message)) {
+      keys.add('chassis_action');
+    }
     if (message.match(/(?:叫|名字是|名叫)/)) {
       keys.add('person_name');
     }
     if (this.findGestureKeyword(message)) {
       keys.add('gesture');
+    }
+    if (this.findMultiGestures(message, ['机械手', '手势执行', '做手势']).length > 0) {
+      keys.add('hand_gestures');
+    }
+    if (this.findMultiGestures(message, ['yolo', 'yolov8', '手势识别']).length > 0) {
+      keys.add('yolo_gestures');
+    }
+    if (this.findEmotionLabels(message).length > 0) {
+      keys.add('emotion_labels');
+    }
+    if (this.findArmActions(message).length > 0) {
+      keys.add('arm_actions');
+    }
+    if (this.findFaceProfiles(message).length > 0) {
+      keys.add('face_profiles');
     }
     if (message.includes('说') || message.includes('具体说')) {
       keys.add('speech_content');
@@ -681,6 +819,62 @@ ${hardwareLines}
     return gestureKeywords.find((keyword) => message.includes(keyword)) ?? null;
   }
 
+  private findEmojiKeyword(message: string): string | null {
+    const emojis = ['开心', '难过', '愤怒'];
+    return emojis.find((emoji) => message.includes(emoji)) ?? null;
+  }
+
+  private findChassisAction(message: string): string | null {
+    if (message.includes('顺时针旋转90') || message.includes('顺时针旋转90°')) {
+      return '顺时针旋转90°';
+    }
+    if (message.includes('前进')) {
+      return '前进';
+    }
+    if (message.includes('后退')) {
+      return '后退';
+    }
+    return null;
+  }
+
+  private findMultiGestures(message: string, requiredKeywords: string[]): string[] {
+    if (!this.hasAnyKeyword(message, requiredKeywords)) {
+      return [];
+    }
+    const gestures = ['石头', '剪刀', '布', '中指', '手势V', '大拇指'];
+    const normalized = message.replace(/v/gi, 'V');
+    return gestures.filter((gesture) => normalized.includes(gesture));
+  }
+
+  private findEmotionLabels(message: string): string[] {
+    if (!this.hasAnyKeyword(message, ['structbert', '情绪分类', '情绪识别'])) {
+      return [];
+    }
+    const labels = ['开心', '难过', '微笑'];
+    return labels.filter((label) => message.includes(label));
+  }
+
+  private findArmActions(message: string): string[] {
+    if (!this.hasAnyKeyword(message, ['机械臂', '夹子', '钳子'])) {
+      return [];
+    }
+    const actions = ['放下', '抬起同时反复夹两下钳子', '挥挥钳子'];
+    return actions.filter((action) => message.includes(action));
+  }
+
+  private findFaceProfiles(message: string): string[] {
+    if (!this.hasAnyKeyword(message, ['人脸识别', '人脸', '人脸图片', '照片', '头像'])) {
+      return [];
+    }
+    const profiles = ['老刘', '老付', '老王'];
+    return profiles.filter((profile) => message.includes(profile));
+  }
+
+  private hasAnyKeyword(message: string, keywords: string[]): boolean {
+    const normalized = message.toLowerCase();
+    return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
+  }
+
   private generateSummary(
     confirmedEntities: Record<string, string>,
     blueprint: WorkflowBlueprint,
@@ -708,5 +902,177 @@ ${confirmedLines || '- 暂无'}
       return [];
     }
     return matches.map((match) => match.replace('Missing required field: ', ''));
+  }
+
+  private buildInteractionResponse(
+    missingInfo: string[],
+    confirmedEntities: Record<string, string>
+  ): AgentResponse | null {
+    const prompt = this.buildInteractionPrompt(missingInfo, confirmedEntities);
+    if (!prompt) {
+      return null;
+    }
+
+    const type =
+      prompt.mode === 'single'
+        ? 'select_single'
+        : prompt.mode === 'multi'
+          ? 'select_multi'
+          : 'image_upload';
+
+    return {
+      type,
+      message: prompt.description ?? prompt.title,
+      interaction: prompt,
+      confirmedEntities,
+      missingInfo,
+      metadata: {
+        showContinueButton: false,
+        showConfirmBuildButton: false,
+      },
+    };
+  }
+
+  private buildInteractionPrompt(
+    missingInfo: string[],
+    confirmedEntities: Record<string, string>
+  ): InteractionRequest | null {
+    const priority: Array<{
+      field: InteractionRequest['field'];
+      mode: InteractionRequest['mode'];
+      title: string;
+      description: string;
+      options: Array<{ label: string; value: string }>;
+      allowUpload?: boolean;
+      uploadHint?: string;
+    }> = [
+      {
+        field: 'face_profiles',
+        mode: 'image',
+        title: '上传人脸图片',
+        description: '请选择人物并上传对应人脸图片',
+        options: [
+          { label: '老刘', value: '老刘' },
+          { label: '老付', value: '老付' },
+          { label: '老王', value: '老王' },
+        ],
+        allowUpload: true,
+        uploadHint: '支持 png/jpg，建议清晰正脸照片',
+      },
+      {
+        field: 'tts_voice',
+        mode: 'single',
+        title: '请选择音色',
+        description: 'TTS 节点需要选择音色',
+        options: [
+          { label: '音色 a', value: 'a' },
+          { label: '音色 b', value: 'b' },
+          { label: '音色 c', value: 'c' },
+        ],
+      },
+      {
+        field: 'screen_emoji',
+        mode: 'single',
+        title: '请选择显示的 emoji',
+        description: '屏幕需要显示的 emoji',
+        options: [
+          { label: '开心', value: '开心' },
+          { label: '难过', value: '难过' },
+          { label: '愤怒', value: '愤怒' },
+        ],
+      },
+      {
+        field: 'chassis_action',
+        mode: 'single',
+        title: '请选择底盘动作',
+        description: '底盘（全向轮）需要执行的动作',
+        options: [
+          { label: '前进', value: '前进' },
+          { label: '后退', value: '后退' },
+          { label: '顺时针旋转90°', value: '顺时针旋转90°' },
+        ],
+      },
+      {
+        field: 'hand_gestures',
+        mode: 'multi',
+        title: '请选择机械手手势',
+        description: '机械手执行手势（可多选）',
+        options: [
+          { label: '石头', value: '石头' },
+          { label: '剪刀', value: '剪刀' },
+          { label: '布', value: '布' },
+          { label: '中指', value: '中指' },
+          { label: '手势V', value: '手势V' },
+          { label: '大拇指', value: '大拇指' },
+        ],
+      },
+      {
+        field: 'yolo_gestures',
+        mode: 'multi',
+        title: '请选择需要识别的手势',
+        description: 'yolov8 手势识别（可多选）',
+        options: [
+          { label: '剪刀', value: '剪刀' },
+          { label: '石头', value: '石头' },
+          { label: '布', value: '布' },
+          { label: '中指', value: '中指' },
+          { label: '手势V', value: '手势V' },
+          { label: '大拇指', value: '大拇指' },
+        ],
+      },
+      {
+        field: 'emotion_labels',
+        mode: 'multi',
+        title: '请选择识别的情绪',
+        description: 'StructBERT 情绪分类（可多选）',
+        options: [
+          { label: '开心', value: '开心' },
+          { label: '难过', value: '难过' },
+          { label: '微笑', value: '微笑' },
+        ],
+      },
+      {
+        field: 'arm_actions',
+        mode: 'multi',
+        title: '请选择机械臂动作',
+        description: '机械臂执行动作（可多选）',
+        options: [
+          { label: '放下', value: '放下' },
+          { label: '抬起同时反复夹两下钳子', value: '抬起同时反复夹两下钳子' },
+          { label: '挥挥钳子', value: '挥挥钳子' },
+        ],
+      },
+    ];
+
+    const missingSet = new Set(missingInfo);
+    const selected = (value?: string) =>
+      value
+        ? value
+            .split(/[，,]/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
+    for (const item of priority) {
+      if (!missingSet.has(item.field)) {
+        continue;
+      }
+      const existing = confirmedEntities[item.field];
+      return {
+        id: randomUUID(),
+        mode: item.mode,
+        field: item.field,
+        title: item.title,
+        description: item.description,
+        options: item.options,
+        minSelections: 1,
+        maxSelections: item.mode === 'multi' ? item.options.length : 1,
+        selected: item.mode === 'multi' ? selected(existing) : existing,
+        allowUpload: item.allowUpload,
+        uploadHint: item.uploadHint,
+      };
+    }
+
+    return null;
   }
 }

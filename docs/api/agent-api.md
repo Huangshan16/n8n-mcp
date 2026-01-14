@@ -21,6 +21,9 @@ npm run agent:dev
 - `guidance`：继续收集信息
 - `summary_ready`：给出结构化摘要 + 蓝图
 - `workflow_ready`：生成了可用的 n8n workflow JSON
+- `select_single`：单选交互（用于音色/emoji/底盘动作）
+- `select_multi`：多选交互（用于机械手/手势识别/情绪分类/机械臂）
+- `image_upload`：图片上传交互（用于人脸识别样本）
 - `error`：异常
 
 ## HTTP 接口
@@ -68,6 +71,19 @@ npm run agent:dev
       "meta": {}
     },
     "reasoning": "string",
+    "interaction": {
+      "id": "uuid",
+      "mode": "single | multi | image",
+      "field": "tts_voice | screen_emoji | chassis_action | hand_gestures | yolo_gestures | emotion_labels | arm_actions | face_profiles",
+      "title": "string",
+      "description": "string",
+      "options": [{ "label": "string", "value": "string" }],
+      "minSelections": 1,
+      "maxSelections": 3,
+      "selected": "string | string[]",
+      "allowUpload": true,
+      "uploadHint": "string"
+    },
     "metadata": {
       "iterations": 1,
       "nodeCount": 4
@@ -201,7 +217,7 @@ N8N_PUBLIC_URL=http://127.0.0.1:5678
 ## 推荐前端调用流程
 1. `POST /api/agent/chat`（首次不传 `sessionId`）
 2. 后续对话携带 `sessionId`
-3. 当返回 `summary_ready`：展示摘要并提示用户确认
-4. 调用 `/api/agent/confirm` 或 WS `confirm_workflow`
-5. 当返回 `workflow_ready`：展示 workflow JSON 或调用 `/api/workflow/create` 部署
-
+3. 当返回 `select_single/select_multi/image_upload`：渲染对应交互组件并收集选择
+4. 当返回 `summary_ready`：展示摘要并提示用户确认
+5. 调用 `/api/agent/confirm` 或 WS `confirm_workflow`
+6. 当返回 `workflow_ready`：展示 workflow JSON 或调用 `/api/workflow/create` 部署

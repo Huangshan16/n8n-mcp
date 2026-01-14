@@ -16,14 +16,49 @@ export interface WorkflowBlueprint {
   missingFields: string[];
 }
 
+export interface InteractionOption {
+  label: string;
+  value: string;
+}
+
+export interface InteractionRequest {
+  id: string;
+  mode: 'single' | 'multi' | 'image';
+  field:
+    | 'tts_voice'
+    | 'screen_emoji'
+    | 'chassis_action'
+    | 'hand_gestures'
+    | 'yolo_gestures'
+    | 'emotion_labels'
+    | 'arm_actions'
+    | 'face_profiles';
+  title: string;
+  description?: string;
+  options: InteractionOption[];
+  minSelections?: number;
+  maxSelections?: number;
+  selected?: string | string[];
+  allowUpload?: boolean;
+  uploadHint?: string;
+}
+
 export interface AgentResponse {
-  type: 'guidance' | 'summary_ready' | 'workflow_ready' | 'error';
+  type:
+    | 'guidance'
+    | 'summary_ready'
+    | 'workflow_ready'
+    | 'error'
+    | 'select_single'
+    | 'select_multi'
+    | 'image_upload';
   message: string;
   blueprint?: WorkflowBlueprint;
   confirmedEntities?: Record<string, string>;
   missingInfo?: string[];
   workflow?: WorkflowDefinition;
   reasoning?: string;
+  interaction?: InteractionRequest;
   metadata?: {
     iterations?: number;
     nodeCount?: number;

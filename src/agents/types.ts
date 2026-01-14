@@ -6,6 +6,44 @@ export type IntentCategory =
 
 export type AgentPhase = 'understanding' | 'generating' | 'deploying';
 
+export type AgentResponseType =
+  | 'guidance'
+  | 'summary_ready'
+  | 'workflow_ready'
+  | 'error'
+  | 'select_single'
+  | 'select_multi'
+  | 'image_upload';
+
+export type InteractionField =
+  | 'tts_voice'
+  | 'screen_emoji'
+  | 'chassis_action'
+  | 'hand_gestures'
+  | 'yolo_gestures'
+  | 'emotion_labels'
+  | 'arm_actions'
+  | 'face_profiles';
+
+export interface InteractionOption {
+  label: string;
+  value: string;
+}
+
+export interface InteractionRequest {
+  id: string;
+  mode: 'single' | 'multi' | 'image';
+  field: InteractionField;
+  title: string;
+  description?: string;
+  options: InteractionOption[];
+  minSelections?: number;
+  maxSelections?: number;
+  selected?: string | string[];
+  allowUpload?: boolean;
+  uploadHint?: string;
+}
+
 export interface Intent {
   category: IntentCategory;
   entities: Record<string, string>;
@@ -33,6 +71,13 @@ export type AgentResponse =
   | {
       type: 'guidance';
       message: string;
+      interaction?: InteractionRequest;
+      confirmedEntities?: Record<string, string>;
+      missingInfo?: string[];
+      metadata?: {
+        showContinueButton?: boolean;
+        showConfirmBuildButton?: boolean;
+      };
     }
   | {
       type: 'summary_ready';
@@ -40,9 +85,21 @@ export type AgentResponse =
       blueprint: WorkflowBlueprint;
       confirmedEntities?: Record<string, string>;
       missingInfo?: string[];
+      interaction?: InteractionRequest;
       metadata?: {
         showContinueButton: boolean;
         showConfirmBuildButton: boolean;
+      };
+    }
+  | {
+      type: 'select_single' | 'select_multi' | 'image_upload';
+      message: string;
+      interaction: InteractionRequest;
+      confirmedEntities?: Record<string, string>;
+      missingInfo?: string[];
+      metadata?: {
+        showContinueButton?: boolean;
+        showConfirmBuildButton?: boolean;
       };
     }
   | {
@@ -50,6 +107,7 @@ export type AgentResponse =
       message: string;
       workflow: WorkflowDefinition;
       reasoning?: string;
+      interaction?: InteractionRequest;
       metadata?: {
         iterations: number;
         nodeCount: number;
@@ -59,6 +117,7 @@ export type AgentResponse =
       type: 'error';
       message: string;
       details?: unknown;
+      interaction?: InteractionRequest;
     };
 
 export interface ConversationTurn {

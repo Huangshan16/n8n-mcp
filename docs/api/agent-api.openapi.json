@@ -252,18 +252,74 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["guidance", "summary_ready", "workflow_ready", "error"]
+            "enum": [
+              "guidance",
+              "summary_ready",
+              "workflow_ready",
+              "error",
+              "select_single",
+              "select_multi",
+              "image_upload"
+            ]
           },
           "message": { "type": "string" },
           "blueprint": { "$ref": "#/components/schemas/WorkflowBlueprint" },
           "workflow": { "$ref": "#/components/schemas/WorkflowDefinition" },
           "reasoning": { "type": "string" },
+          "interaction": { "$ref": "#/components/schemas/InteractionRequest" },
           "metadata": {
             "type": "object",
             "additionalProperties": true
           }
         },
         "required": ["type", "message"]
+      },
+      "InteractionRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "mode": { "type": "string", "enum": ["single", "multi", "image"] },
+          "field": {
+            "type": "string",
+            "enum": [
+              "tts_voice",
+              "screen_emoji",
+              "chassis_action",
+              "hand_gestures",
+              "yolo_gestures",
+              "emotion_labels",
+              "arm_actions",
+              "face_profiles"
+            ]
+          },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string" },
+                "value": { "type": "string" }
+              },
+              "required": ["label", "value"]
+            }
+          },
+          "minSelections": { "type": "integer" },
+          "maxSelections": { "type": "integer" },
+          "selected": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            ]
+          },
+          "allowUpload": { "type": "boolean" },
+          "uploadHint": { "type": "string" }
+        },
+        "required": ["id", "mode", "field", "title", "options"]
       },
       "WorkflowBlueprint": {
         "type": "object",

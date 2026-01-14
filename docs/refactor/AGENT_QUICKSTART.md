@@ -5,6 +5,7 @@ This quick start wires the agent backend, Web UI, and n8n instance together.
 ## 1) Initialize the Agent Tables
 
 ```bash
+npm install
 npm run build
 npm run agent:db:init
 ```

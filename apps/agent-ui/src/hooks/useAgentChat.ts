@@ -16,6 +16,7 @@ export interface ChatMessage {
   workflow?: WorkflowDefinition;
   blueprint?: WorkflowBlueprint;
   reasoning?: string;
+  interaction?: AgentResponse['interaction'];
   metadata?: {
     iterations?: number;
     nodeCount?: number;
@@ -58,7 +59,13 @@ export function useAgentChat() {
     if (response.type === 'workflow_ready') {
       setBuildStatus(2);
     }
-    if (response.type === 'guidance' || response.type === 'summary_ready') {
+    if (
+      response.type === 'guidance' ||
+      response.type === 'summary_ready' ||
+      response.type === 'select_single' ||
+      response.type === 'select_multi' ||
+      response.type === 'image_upload'
+    ) {
       setBuildStatus(0);
     }
     if (response.type === 'error') {
@@ -72,6 +79,7 @@ export function useAgentChat() {
       workflow: response.workflow,
       blueprint: response.blueprint,
       reasoning: response.reasoning,
+      interaction: response.interaction,
       metadata: response.metadata,
       variant: response.type === 'error' ? 'error' : 'normal',
       responseType: response.type,
