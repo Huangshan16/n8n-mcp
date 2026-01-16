@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage, ConnectionStatus, BuildStatus } from '../hooks/useAgentChat';
-import type { WorkflowDefinition } from '../lib/agentApi';
+import type { InteractionRequest, WorkflowDefinition } from '../lib/agentApi';
+import { uploadFaceImage } from '../lib/agentApi';
 import { BuildProgressBar } from './BuildProgressBar';
+import { InteractionCard } from './InteractionCard';
 
 const QUICK_PROMPTS = [
   '见到老刘竖个中指骂人',
@@ -88,6 +90,53 @@ export function ChatInterface({
     return fields.map((field) => FIELD_LABELS[field] || field).join('、');
   };
 
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+
+  const buildInteractionMessage = async (
+    interaction: InteractionRequest,
+    payload: { selected: string[]; file?: File | null }
+  ) => {
+    const list = payload.selected.join('、');
+    switch (interaction.field) {
+      case 'tts_voice':
+        return `音色 ${payload.selected[0]}`;
+      case 'screen_emoji':
+        return `屏幕 emoji ${payload.selected[0]}`;
+      case 'chassis_action':
+        return `底盘 ${payload.selected[0]}`;
+      case 'hand_gestures':
+        return `机械手 手势执行 ${list}`;
+      case 'yolo_gestures':
+        return `yolov8 手势识别 ${list}`;
+      case 'emotion_labels':
+        return `StructBERT 情绪分类 ${list}`;
+      case 'arm_actions':
+        return `机械臂 动作 ${list}`;
+      case 'face_profiles': {
+        const profile = payload.selected[0] || interaction.options[0]?.value || '未知';
+        if (payload.file) {
+          try {
+            const base64 = await fileToBase64(payload.file);
+            const result = await uploadFaceImage(profile, payload.file.name, base64);
+            const suffix = result.url ? ` ${result.url}` : result.fileName ? ` ${result.fileName}` : '';
+            return `人脸识别 ${profile} 图片${suffix || '已上传'}`;
+          } catch {
+            return `人脸识别 ${profile} 图片上传失败`;
+          }
+        }
+        return `人脸识别 ${profile} 图片未选择`;
+      }
+      default:
+        return list;
+    }
+  };
+
   return (
     <section className="glass-panel relative flex h-full min-h-0 flex-col overflow-hidden rounded-3xl">
       <div className="neural-grid" />
@@ -144,6 +193,16 @@ export function ChatInterface({
                     <p>执行: {formatNodeList(message.blueprint.executors)}</p>
                     <p>缺失: {formatMissingFields(message.blueprint.missingFields)}</p>
                   </div>
+                ) : null}
+                {message.interaction ? (
+                  <InteractionCard
+                    interaction={message.interaction}
+                    onSubmit={async (payload) => {
+                      const messageText = await buildInteractionMessage(message.interaction!, payload);
+                      onSend(messageText);
+                    }}
+                    disabled={isBusy}
+                  />
                 ) : null}
                 {message.responseType === 'summary_ready' && !dismissedSummaries[message.id] ? (
                   <div className="mt-3 flex flex-wrap gap-2">

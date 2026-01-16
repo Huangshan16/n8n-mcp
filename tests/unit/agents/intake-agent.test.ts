@@ -137,6 +137,52 @@ describe('IntakeAgent', () => {
     expect(response.interaction?.mode).toBe('single');
   });
 
+  it('returns image upload interaction when face profile is required', async () => {
+    const llmClient = {
+      chat: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          category: 'face_recognition_action',
+          entities: {
+            person_name: '老刘',
+            gesture: '中指',
+            speech_content: '傻瓜蛋',
+            tts_voice: 'a',
+            hardware_component: 'face_recognition',
+            action: 'identify',
+          },
+          confidence: 0.9,
+        })
+      ),
+    };
+    const workflowArchitect = { generateWorkflow: vi.fn() } as any;
+    const hardwareService = { inferComponentsFromIntent: vi.fn().mockReturnValue([]) } as any;
+    const sessionService = new SessionService();
+    const agent = new IntakeAgent(
+      {
+        llmProvider: 'openai',
+        llmModel: 'test',
+        llmApiKey: 'key',
+        maxConversationTurns: 4,
+        convergenceThreshold: 0.7,
+        llmTimeoutMs: 1000,
+        workflowCacheTtlSeconds: 300,
+        maxIterations: 2,
+        promptVariant: 'baseline',
+      },
+      llmClient as any,
+      workflowArchitect,
+      hardwareService,
+      sessionService,
+      []
+    );
+
+    const session = sessionService.getOrCreate();
+    const response = await agent.processUserInput('识别老刘', session.id);
+
+    expect(response.type).toBe('image_upload');
+    expect(response.interaction?.field).toBe('face_profiles');
+  });
+
   it('retries workflow generation on confirm up to max attempts', async () => {
     const llmClient = {
       chat: vi.fn().mockResolvedValue(

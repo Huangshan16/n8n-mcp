@@ -52,6 +52,7 @@ const BASE_NODE_QUERIES = [
 const BASE_NODE_TYPES = [...ALLOWED_NODE_TYPES];
 
 export class WorkflowArchitect {
+  private static readonly MAX_ITERATIONS_CAP = 3;
   private maxIterations: number;
   private llmTimeoutMs: number;
   private cacheTtlSeconds: number;
@@ -65,7 +66,10 @@ export class WorkflowArchitect {
     private mcpClient: MCPClient,
     options: WorkflowArchitectOptions = {}
   ) {
-    this.maxIterations = options.maxIterations ?? 5;
+    this.maxIterations = Math.min(
+      options.maxIterations ?? 5,
+      WorkflowArchitect.MAX_ITERATIONS_CAP
+    );
     this.llmTimeoutMs = options.llmTimeoutMs ?? 30000;
     this.cacheTtlSeconds = options.cacheTtlSeconds ?? 600;
     this.cache = new SimpleCache();
@@ -104,7 +108,8 @@ export class WorkflowArchitect {
     let reasoning = '';
     let workflow: WorkflowDefinition | undefined;
 
-    const maxIterations = options.maxIterations ?? this.maxIterations;
+    const requestedIterations = options.maxIterations ?? this.maxIterations;
+    const maxIterations = Math.min(requestedIterations, WorkflowArchitect.MAX_ITERATIONS_CAP);
 
     for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
       const messages = this.buildMessages(request.conversationHistory, systemPrompt, userMessage, lastErrors);

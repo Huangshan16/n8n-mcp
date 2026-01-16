@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
+import path from 'node:path';
+import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { AgentService } from './agent-service';
 import { WorkflowDeployer } from '../agents/workflow-service';
 import { attachWebSocketServer } from './websocket';
@@ -25,7 +28,11 @@ export class AgentHttpServer {
 
     const app = express();
     app.use(cors());
-    app.use(express.json({ limit: '1mb' }));
+    app.use(express.json({ limit: '6mb' }));
+
+    const uploadDir = path.resolve(process.cwd(), 'docs', 'uploads');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    app.use('/uploads', express.static(uploadDir));
 
     app.get('/api/health', (_req, res) => {
       res.json({ status: 'ok' });
@@ -93,6 +100,40 @@ export class AgentHttpServer {
 
       this.agentService.resetSession(sessionId);
       res.json({ success: true });
+    });
+
+    app.post('/api/agent/upload-face', (req, res) => {
+      const profile = typeof req.body?.profile === 'string' ? req.body.profile : 'profile';
+      const fileName = typeof req.body?.fileName === 'string' ? req.body.fileName : 'image.png';
+      const contentBase64 = typeof req.body?.contentBase64 === 'string' ? req.body.contentBase64 : '';
+
+      if (!contentBase64) {
+        res.status(400).json({ error: 'contentBase64 is required' });
+        return;
+      }
+
+      const safeProfile = profile.replace(/[^a-zA-Z0-9_-]/g, '') || 'profile';
+      const ext = path.extname(fileName) || '.png';
+      const uploadId = randomUUID();
+      const storedName = `${safeProfile}_${uploadId}${ext}`;
+
+      try {
+        const base64Payload = contentBase64.replace(/^data:[^;]+;base64,/, '');
+        const buffer = Buffer.from(base64Payload, 'base64');
+        fs.writeFileSync(path.join(uploadDir, storedName), buffer);
+      } catch (error) {
+        logger.warn('Upload face image failed', error);
+        res.status(400).json({ error: 'invalid base64 data' });
+        return;
+      }
+
+      res.json({
+        success: true,
+        profile,
+        fileId: uploadId,
+        fileName: storedName,
+        url: `/uploads/${storedName}`,
+      });
     });
 
     app.post('/api/workflow/create', async (req, res) => {

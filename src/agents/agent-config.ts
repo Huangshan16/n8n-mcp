@@ -30,7 +30,7 @@ const agentConfigSchema = z.object({
   AGENT_CONVERGENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
   AGENT_LLM_TIMEOUT_MS: z.coerce.number().positive().default(30000),
   AGENT_WORKFLOW_CACHE_TTL: z.coerce.number().positive().default(600),
-  AGENT_MAX_ITERATIONS: z.coerce.number().positive().default(5),
+  AGENT_MAX_ITERATIONS: z.coerce.number().positive().default(3),
   AGENT_PROMPT_VARIANT: z.string().optional(),
 });
 

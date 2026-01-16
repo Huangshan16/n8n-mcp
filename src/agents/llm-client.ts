@@ -64,9 +64,10 @@ export class OpenAILLMClient implements LLMClient {
       throw new Error('LLM response missing content');
     }
 
-    logger.debug('OpenAILLMClient: classify response received', {
+    logger.info('OpenAILLMClient: classify response received', {
       model: this.model,
       contentLength: content.length,
+      content,
     });
     try {
       return JSON.parse(content) as Intent;
@@ -95,9 +96,10 @@ export class OpenAILLMClient implements LLMClient {
     });
 
     const content = response.choices?.[0]?.message?.content || '';
-    logger.debug('OpenAILLMClient: chat response received', {
+    logger.info('OpenAILLMClient: chat response received', {
       model: this.model,
       contentLength: content.length,
+      content,
     });
     return content;
   }

@@ -17,8 +17,7 @@ import { logger } from '../utils/logger';
 
 export class IntakeAgent {
   private static readonly SUMMARY_CADENCE = 3;
-  private static readonly CONFIRM_MAX_ATTEMPTS = 3;
-  private static readonly CONFIRM_WORKFLOW_ITERATIONS = 2;
+  private static readonly CONFIRM_WORKFLOW_ITERATIONS = 3;
   private agentLogger = new AgentLogger();
 
   constructor(
@@ -196,70 +195,67 @@ export class IntakeAgent {
       session.workflowSummary ?? this.generateSummary(confirmedEntities, resolvedBlueprint, missingInfo);
     this.sessionService.setWorkflowSummary(sessionId, summary);
     const history = this.sessionService.getHistory(sessionId);
-    let lastError = '工作流校验失败';
+    logger.debug('IntakeAgent: generating workflow after confirm', { sessionId });
+    const result = await this.workflowArchitect.generateWorkflow(
+      {
+        sessionId,
+        userIntent: summary,
+        entities: confirmedEntities,
+        hardwareComponents,
+        conversationHistory: history,
+      },
+      { maxIterations: IntakeAgent.CONFIRM_WORKFLOW_ITERATIONS }
+    );
 
-    for (let attempt = 1; attempt <= IntakeAgent.CONFIRM_MAX_ATTEMPTS; attempt += 1) {
-      logger.debug('IntakeAgent: generating workflow after confirm', { sessionId, attempt });
-      const result = await this.workflowArchitect.generateWorkflow(
-        {
-          sessionId,
-          userIntent: summary,
-          entities: confirmedEntities,
-          hardwareComponents,
-          conversationHistory: history,
+    if (result.success && result.workflow) {
+      this.sessionService.setWorkflow(sessionId, result.workflow);
+      this.sessionService.setConfirmed(sessionId, true);
+      this.sessionService.setPhase(sessionId, 'deploying');
+      this.agentLogger.logPhaseChange({
+        sessionId: session.id,
+        from: 'generating',
+        to: 'deploying',
+      });
+      const response: AgentResponse = {
+        type: 'workflow_ready',
+        message: `工作流已生成，共${result.workflow.nodes.length}个节点，可继续创建。`,
+        workflow: result.workflow,
+        reasoning: result.reasoning,
+        metadata: {
+          iterations: result.iterations,
+          nodeCount: result.workflow.nodes.length,
         },
-        { maxIterations: IntakeAgent.CONFIRM_WORKFLOW_ITERATIONS }
-      );
+      };
+      this.sessionService.appendTurn(sessionId, 'assistant', response.message);
+      return response;
+    }
 
-      if (result.success && result.workflow) {
-        this.sessionService.setWorkflow(sessionId, result.workflow);
-        this.sessionService.setConfirmed(sessionId, true);
-        this.sessionService.setPhase(sessionId, 'deploying');
+    let lastError = '工作流校验失败';
+    if (result.validationResult?.errors?.length) {
+      lastError = result.validationResult.errors.map((error) => error.message).join('；');
+      const missingFields = this.extractMissingFieldsFromError(lastError);
+      if (missingFields.length > 0) {
+        this.sessionService.setPhase(sessionId, 'understanding');
         this.agentLogger.logPhaseChange({
           sessionId: session.id,
           from: 'generating',
-          to: 'deploying',
+          to: 'understanding',
         });
         const response: AgentResponse = {
-          type: 'workflow_ready',
-          message: `工作流已生成，共${result.workflow.nodes.length}个节点，可继续创建。`,
-          workflow: result.workflow,
-          reasoning: result.reasoning,
-          metadata: {
-            iterations: result.iterations,
-            nodeCount: result.workflow.nodes.length,
-          },
+          type: 'guidance',
+          message: `工作流生成遇到问题，还需要确认：${missingFields.map((field) => this.humanizeField(field)).join('、')}`,
         };
         this.sessionService.appendTurn(sessionId, 'assistant', response.message);
         return response;
       }
-
-      if (result.validationResult?.errors?.length) {
-        lastError = result.validationResult.errors.map((error) => error.message).join('；');
-        const missingFields = this.extractMissingFieldsFromError(lastError);
-        if (missingFields.length > 0 && attempt < IntakeAgent.CONFIRM_MAX_ATTEMPTS) {
-          this.sessionService.setPhase(sessionId, 'understanding');
-          this.agentLogger.logPhaseChange({
-            sessionId: session.id,
-            from: 'generating',
-            to: 'understanding',
-          });
-          const response: AgentResponse = {
-            type: 'guidance',
-            message: `工作流生成遇到问题，还需要确认：${missingFields.map((field) => this.humanizeField(field)).join('、')}`,
-          };
-          this.sessionService.appendTurn(sessionId, 'assistant', response.message);
-          return response;
-        }
-      }
     }
 
-      const response: AgentResponse = {
-        type: 'guidance',
-        message: `工作流校验失败：${lastError}。请补充说明后再试。`,
-        confirmedEntities: session.confirmedEntities,
-        missingInfo: [],
-      };
+    const response: AgentResponse = {
+      type: 'guidance',
+      message: `工作流校验失败：${lastError}。请补充说明后再试。`,
+      confirmedEntities: session.confirmedEntities,
+      missingInfo: [],
+    };
     this.sessionService.setPhase(sessionId, 'understanding');
     this.agentLogger.logPhaseChange({
       sessionId: session.id,
@@ -546,10 +542,17 @@ ${hardwareLines}
       }
     }
 
-    if (this.hasAnyKeyword(message, ['人脸识别', '人脸', '人脸图片', '照片', '头像'])) {
-      if (!confirmedEntities.face_profiles) {
-        missingFields.add('face_profiles');
-      }
+    const shouldRequireFaceProfile =
+      category === 'face_recognition_action' &&
+      Boolean(confirmedEntities.person_name) &&
+      (this.hasFaceImageHint(message) ||
+        this.hasAnyKeyword(
+          String(confirmedEntities.hardware_component ?? ''),
+          ['face']
+        ) ||
+        this.hasAnyKeyword(String(confirmedEntities.action ?? ''), ['identify', 'recognize']));
+    if (shouldRequireFaceProfile && !confirmedEntities.face_profiles) {
+      missingFields.add('face_profiles');
     }
 
     return Array.from(missingFields);
@@ -698,11 +701,16 @@ ${hardwareLines}
     const cleaned = value.replace(/[，,。！？!?\s]/g, '');
     const candidates = Array.from(message.matchAll(/老[\u4e00-\u9fa5]{1,2}/g)).map((m) => m[0]);
     const candidate = candidates[0] ?? cleaned;
+    const withoutImageHint = candidate.replace(/(照片|图片|头像|图)$/, '');
+    const normalizedCandidate = withoutImageHint || candidate;
     const suffixes = ['竖', '比', '举', '做', '打', '挥', '招', '握', '骂', '喊', '说', '见'];
-    if (candidate.length >= 3 && suffixes.includes(candidate[candidate.length - 1])) {
-      return candidate.slice(0, -1);
+    if (
+      normalizedCandidate.length >= 3 &&
+      suffixes.includes(normalizedCandidate[normalizedCandidate.length - 1])
+    ) {
+      return normalizedCandidate.slice(0, -1);
     }
-    return candidate;
+    return normalizedCandidate;
   }
 
   private normalizeGesture(value: string): string {
@@ -776,7 +784,7 @@ ${hardwareLines}
     if (this.findArmActions(message).length > 0) {
       keys.add('arm_actions');
     }
-    if (this.findFaceProfiles(message).length > 0) {
+    if (this.findFaceProfiles(message).length > 0 || this.hasFaceImageHint(message)) {
       keys.add('face_profiles');
     }
     if (message.includes('说') || message.includes('具体说')) {
@@ -863,11 +871,20 @@ ${hardwareLines}
   }
 
   private findFaceProfiles(message: string): string[] {
-    if (!this.hasAnyKeyword(message, ['人脸识别', '人脸', '人脸图片', '照片', '头像'])) {
+    if (!this.hasFaceImageHint(message)) {
       return [];
     }
     const profiles = ['老刘', '老付', '老王'];
     return profiles.filter((profile) => message.includes(profile));
+  }
+
+  private hasFaceImageHint(message: string): boolean {
+    if (
+      this.hasAnyKeyword(message, ['人脸识别', '人脸', '人脸图片', '照片', '图片', '头像'])
+    ) {
+      return true;
+    }
+    return /老[\u4e00-\u9fa5]{1,2}图/.test(message);
   }
 
   private hasAnyKeyword(message: string, keywords: string[]): boolean {
@@ -1058,6 +1075,9 @@ ${confirmedLines || '- 暂无'}
         continue;
       }
       const existing = confirmedEntities[item.field];
+      const fallback =
+        item.field === 'face_profiles' ? confirmedEntities.person_name : undefined;
+      const selectedValue = existing || fallback;
       return {
         id: randomUUID(),
         mode: item.mode,
@@ -1067,7 +1087,7 @@ ${confirmedLines || '- 暂无'}
         options: item.options,
         minSelections: 1,
         maxSelections: item.mode === 'multi' ? item.options.length : 1,
-        selected: item.mode === 'multi' ? selected(existing) : existing,
+        selected: item.mode === 'multi' ? selected(selectedValue) : selectedValue,
         allowUpload: item.allowUpload,
         uploadHint: item.uploadHint,
       };

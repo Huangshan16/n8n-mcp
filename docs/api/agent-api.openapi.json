@@ -190,6 +190,37 @@
         }
       }
     },
+    "/api/agent/upload-face": {
+      "post": {
+        "summary": "Upload face image (base64)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UploadFaceRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UploadFaceResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflow/create": {
       "post": {
         "summary": "Create workflow in n8n",
@@ -396,6 +427,26 @@
             "required": ["sessionId"]
           }
         ]
+      },
+      "UploadFaceRequest": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "string" },
+          "fileName": { "type": "string" },
+          "contentBase64": { "type": "string" }
+        },
+        "required": ["profile", "fileName", "contentBase64"]
+      },
+      "UploadFaceResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "profile": { "type": "string" },
+          "fileId": { "type": "string" },
+          "fileName": { "type": "string" },
+          "url": { "type": "string" }
+        },
+        "required": ["success", "fileName", "url"]
       },
       "WorkflowCreateResult": {
         "type": "object",

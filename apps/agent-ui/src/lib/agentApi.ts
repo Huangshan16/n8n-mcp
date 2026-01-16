@@ -79,6 +79,14 @@ export interface WorkflowCreateResult {
   workflowUrl?: string;
 }
 
+export interface UploadFaceImageResult {
+  success: boolean;
+  profile?: string;
+  fileId?: string;
+  fileName?: string;
+  url?: string;
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -92,6 +100,25 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function uploadFaceImage(
+  profile: string,
+  fileName: string,
+  contentBase64: string
+): Promise<UploadFaceImageResult> {
+  const response = await fetch(`${API_URL}/api/agent/upload-face`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile, fileName, contentBase64 }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  return response.json() as Promise<UploadFaceImageResult>;
 }
 
 export async function sendAgentMessage(message: string, sessionId?: string): Promise<AgentChatResponse> {

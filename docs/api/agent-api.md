@@ -141,7 +141,38 @@ npm run agent:dev
 
 ---
 
-### 6) 创建 n8n Workflow
+### 6) 上传人脸图片
+**POST** `/api/agent/upload-face`
+
+请求
+```json
+{
+  "profile": "老刘 | 老付 | 老王",
+  "fileName": "laoliu.png",
+  "contentBase64": "data:image/png;base64,...."
+}
+```
+
+响应
+```json
+{
+  "success": true,
+  "profile": "老刘",
+  "fileId": "uuid",
+  "fileName": "laoliu_<uuid>.png",
+  "url": "/uploads/laoliu_<uuid>.png"
+}
+```
+
+错误码
+- `400`：`contentBase64 is required` / `invalid base64 data`
+
+说明
+- 返回的 `url` 可用 `http://127.0.0.1:3005/uploads/<file>` 访问
+
+---
+
+### 7) 创建 n8n Workflow
 **POST** `/api/workflow/create`
 
 请求（二选一）
